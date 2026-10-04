@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Betaflight auto-tune</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <main>
+    <header class="masthead">
+      <h1>Betaflight auto-tune</h1>
+      <p>Drop a blackbox log, choose how you want the quad to fly, get PID, filter and rate changes to paste in the CLI.</p>
+    </header>
+
+    <section class="controls" aria-label="Log and style">
+      <label id="drop" class="drop" tabindex="0">
+        <input id="file" type="file" accept=".bbl,.bfl,.BBL,.BFL,.txt,.TXT">
+        <span class="drop-title" id="drop-title">Choose a blackbox log</span>
+        <span class="drop-hint" id="drop-hint">or drop a .bbl / .bfl file here</span>
+      </label>
+
+      <div class="field" id="flight-field" hidden>
+        <label for="flight">Flight</label>
+        <select id="flight"></select>
+      </div>
+
+      <fieldset class="field">
+        <legend>Flight style</legend>
+        <div class="segmented" id="styles" role="radiogroup"></div>
+      </fieldset>
+    </section>
+
+    <p class="status" id="status" role="status" hidden></p>
+
+    <div id="results" hidden>
+      <p class="style-note" id="style-note"></p>
+
+      <section class="tiles" id="tiles" aria-label="Flight summary"></section>
+
+      <section class="charts">
+        <article class="card">
+          <h2>Step response</h2>
+          <p class="card-sub">How each axis follows a sudden stick move. 1.0 is the commanded rate; the highest point of each curve should land in the shaded band.</p>
+          <div class="legend" id="step-legend"></div>
+          <div class="chart" id="step-chart"></div>
+        </article>
+        <article class="card">
+          <h2>Gyro noise spectrum</h2>
+          <p class="card-sub">Filtered gyro, in deg/s per √Hz. Everything right of the 100 Hz line counts as noise.</p>
+          <div class="legend" id="noise-legend"></div>
+          <div class="chart" id="noise-chart"></div>
+        </article>
+      </section>
+
+      <section class="card">
+        <h2>Measured</h2>
+        <div class="table-wrap">
+          <table id="measured">
+            <thead>
+              <tr>
+                <th scope="col">Axis</th>
+                <th scope="col" class="num">Overshoot</th>
+                <th scope="col" class="num">Rise to 50%</th>
+                <th scope="col" class="num">Settles at</th>
+                <th scope="col" class="num">Gyro noise</th>
+                <th scope="col" class="num">D-term noise</th>
+                <th scope="col" class="num">Noise peak</th>
+                <th scope="col" class="num">Fastest move</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Suggested changes</h2>
+        <div id="changes"></div>
+      </section>
+
+      <section class="card" id="notes-card">
+        <h2>Notes</h2>
+        <ul id="notes"></ul>
+      </section>
+
+      <section class="card" id="cli-card">
+        <div class="card-head">
+          <h2>Betaflight CLI</h2>
+          <div class="actions">
+            <button type="button" id="copy">Copy</button>
+            <button type="button" id="download">Download</button>
+          </div>
+        </div>
+        <pre id="cli"></pre>
+      </section>
+    </div>
+  </main>
+  <script src="/static/chart.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>

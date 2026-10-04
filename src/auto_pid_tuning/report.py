@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 from .analysis import FlightAnalysis
@@ -11,8 +12,8 @@ from .tuner import TuningResult
 _GROUP_TITLES = {"pid": "PIDs", "filter": "Filters", "rates": "Rates"}
 
 
-def to_dict(headers: dict[str, Any], analysis: FlightAnalysis, result: TuningResult) -> dict:
-    """JSON-serialisable summary, the payload a UI would consume."""
+def flight_to_dict(headers: dict[str, Any], analysis: FlightAnalysis) -> dict:
+    """JSON-serialisable measurements of a flight, independent of any style."""
     axes = {}
     for axis in AXES:
         step = analysis.step[axis]
@@ -24,9 +25,10 @@ def to_dict(headers: dict[str, Any], analysis: FlightAnalysis, result: TuningRes
             else {
                 "valid": step.valid,
                 "windows": step.windows,
+                "bandwidth": step.bandwidth,
                 "peak": step.peak,
                 "peak_time": step.peak_time,
-                "rise_time": step.rise_time,
+                "rise_time": None if math.isnan(step.rise_time) else step.rise_time,
                 "steady_state": step.steady_state,
                 "time": step.time.tolist(),
                 "response": step.response.tolist(),
@@ -47,11 +49,25 @@ def to_dict(headers: dict[str, Any], analysis: FlightAnalysis, result: TuningRes
     return {
         "firmware": headers.get("Firmware revision"),
         "craft": headers.get("Craft name"),
-        "style": result.style.name,
         "duration": analysis.duration,
         "sample_rate": analysis.sample_rate,
         "motor_saturation": analysis.motor_saturation,
         "axes": axes,
+        "spectrum": {
+            "hz": analysis.spectrum_hz.tolist(),
+            **{axis: values.tolist() for axis, values in analysis.gyro_spectrum.items()},
+        },
+    }
+
+
+def tuning_to_dict(result: TuningResult) -> dict:
+    """JSON-serialisable suggestions for one style."""
+    style = result.style
+    return {
+        "style": style.name,
+        "description": style.description,
+        "peak_min": style.peak_min,
+        "peak_max": style.peak_max,
         "changes": [
             {
                 "group": change.group,
@@ -65,6 +81,11 @@ def to_dict(headers: dict[str, Any], analysis: FlightAnalysis, result: TuningRes
         "notes": result.notes,
         "cli": result.cli_commands(),
     }
+
+
+def to_dict(headers: dict[str, Any], analysis: FlightAnalysis, result: TuningResult) -> dict:
+    """JSON-serialisable summary of a flight and its suggestions for one style."""
+    return {**flight_to_dict(headers, analysis), **tuning_to_dict(result)}
 
 
 def to_text(headers: dict[str, Any], analysis: FlightAnalysis, result: TuningResult) -> str:
