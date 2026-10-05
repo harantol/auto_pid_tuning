@@ -6,7 +6,15 @@ import json
 
 import pytest
 
-from auto_pid_tuning import analyze, get_style, load_log, log_count, tune
+from auto_pid_tuning import (
+    analyze,
+    flight_sizes,
+    get_style,
+    load_log,
+    log_count,
+    longest_flight,
+    tune,
+)
 from auto_pid_tuning.blackbox import LogError, firmware_version
 from auto_pid_tuning.cli import main
 from auto_pid_tuning.report import to_dict, to_text
@@ -94,3 +102,32 @@ def test_cli_json_and_log_index(capsys):
     assert set(payload["axes"]) == {"roll", "pitch", "yaw"}
 
     assert main([str(SAMPLE_MULTI), "--log-index", "9"]) == 1
+
+
+def test_flight_sizes_survives_a_truncated_flight(tmp_path):
+    # A flash dump: a bench-test log cut in the middle of its header, then a real flight.
+    marker = b"H Product:Blackbox flight data recorder by Nicholas Sherlock\n"
+    dump = tmp_path / "btfl_all.bbl"
+    dump.write_bytes(marker + b"H Data ver" + marker + b"H Data version:2\n" + b"x" * 500)
+
+    assert flight_sizes(dump) == [len(marker) + 10, len(marker) + 17 + 500]
+    assert log_count(dump) == 2
+    assert longest_flight(dump) == 2
+    with pytest.raises(LogError, match="Flight 1 of btfl_all.bbl"):
+        load_log(dump, 1)
+    with pytest.raises(LogError, match="no flight 3"):
+        load_log(dump, 3)
+
+
+def test_flight_sizes_skips_erased_flash(tmp_path):
+    marker = b"H Product:Blackbox flight data recorder by Nicholas Sherlock\n"
+    dump = tmp_path / "dump.bbl"
+    dump.write_bytes(b"\xff" * 4096 + marker + b"H Data version:2\n")
+    assert flight_sizes(dump) == [len(marker) + 17]
+
+
+def test_flight_sizes_rejects_other_files(tmp_path):
+    other = tmp_path / "notes.txt"
+    other.write_bytes(b"not a blackbox log\n")
+    with pytest.raises(LogError, match="not a blackbox log"):
+        flight_sizes(other)

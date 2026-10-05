@@ -67,7 +67,7 @@ def test_analyze_picks_a_flight():
 
     default = post(None).json()
     assert default["log_count"] == 3
-    assert default["log_index"] == 3  # the last flight unless asked otherwise
+    assert default["log_index"] == 3  # the longest flight unless asked otherwise
 
     assert post(1).json()["log_index"] == 1
     assert post(7).status_code == 400

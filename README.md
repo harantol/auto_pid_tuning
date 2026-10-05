@@ -15,7 +15,7 @@ The web app takes a log by drag and drop, shows the step response and noise spec
 switches between flight styles without re-uploading. `--port`, `--host` and `--no-browser`
 are available.
 
-Command-line options: `--log-index N` picks a flight when the file holds several (default: the last one),
+Command-line options: `--log-index N` picks a flight when the file holds several (default: the longest one),
 `--json` prints the full analysis (step responses included), `--output tune.txt` writes the
 CLI commands to a file. Paste the commands in the Betaflight CLI tab.
 

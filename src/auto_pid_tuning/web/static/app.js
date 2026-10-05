@@ -137,8 +137,11 @@ function renderFlightPicker(data) {
   const select = $("flight");
   $("flight-field").hidden = data.log_count < 2;
   select.replaceChildren();
+  // A flash dump holds one log per arming, mostly tiny bench tests: show sizes to tell them apart.
   for (let i = 1; i <= data.log_count; i++) {
-    const option = el("option", "", `${i} of ${data.log_count}`);
+    const bytes = data.flight_bytes[i - 1];
+    const size = bytes >= 1e6 ? `${(bytes / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1e3))} kB`;
+    const option = el("option", "", `${i} of ${data.log_count} (${size})`);
     option.value = i;
     option.selected = i === data.log_index;
     select.appendChild(option);

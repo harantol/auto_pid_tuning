@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 from .analysis import analyze
-from .blackbox import LogError, load_log, log_count
+from .blackbox import LogError, load_log, log_count, longest_flight
 from .report import to_dict, to_text
 from .styles import STYLES, get_style
 from .tuner import tune
@@ -30,7 +30,7 @@ def build_parser() -> argparse.ArgumentParser:
         "-i",
         "--log-index",
         type=int,
-        help="flight to analyse when the file holds several (1-based, default: the last one)",
+        help="flight to analyse when the file holds several (1-based, default: the longest one)",
     )
     parser.add_argument("--json", action="store_true", help="print the full result as JSON")
     parser.add_argument("-o", "--output", type=Path, help="write the CLI commands to this file")
@@ -41,8 +41,8 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         style = get_style(args.style)
-        count = log_count(args.log) if args.log.is_file() else 1
-        index = args.log_index or count
+        count = log_count(args.log)
+        index = args.log_index or longest_flight(args.log)
         if not 1 <= index <= count:
             raise LogError(f"--log-index must be between 1 and {count} for this file.")
         log = load_log(args.log, index)

@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from ..analysis import analyze
-from ..blackbox import LogError, load_log, log_count
+from ..blackbox import LogError, flight_sizes, load_log
 from ..report import flight_to_dict, tuning_to_dict
 from ..styles import STYLES
 from ..tuner import tune
@@ -55,8 +55,9 @@ def analyze_upload(file: UploadFile, log_index: int | None = Form(None)) -> dict
         with os.fdopen(handle, "wb") as out:
             shutil.copyfileobj(file.file, out)
         try:
-            count = log_count(name)
-            index = log_index or count
+            sizes = flight_sizes(name)
+            count = len(sizes)
+            index = log_index or sizes.index(max(sizes)) + 1  # the longest flight by default
             if not 1 <= index <= count:
                 raise LogError(f"This file holds {count} flight(s); flight {index} does not exist.")
             log = load_log(name, index)
@@ -72,6 +73,7 @@ def analyze_upload(file: UploadFile, log_index: int | None = Form(None)) -> dict
         "filename": file.filename,
         "log_index": index,
         "log_count": count,
+        "flight_bytes": sizes,
         **flight_to_dict(log.headers, analysis),
         "tunes": {
             style.name: tuning_to_dict(tune(log.headers, analysis, style))

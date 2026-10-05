@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -15,6 +17,9 @@ from orangebox import Parser
 logging.getLogger("orangebox").setLevel(logging.ERROR)
 
 AXES = ("roll", "pitch", "yaw")
+
+# First bytes of every log: a file holds one per arming.
+LOG_START = b"H Product:Blackbox"
 
 # Value of the `debug_mode` header for which debug[0..2] hold the unfiltered gyro.
 DEBUG_GYRO_SCALED = 6
@@ -59,20 +64,69 @@ def firmware_version(headers: dict[str, Any]) -> tuple[int, int]:
     return (int(match.group(1)), int(match.group(2))) if match else (0, 0)
 
 
+def _flight_spans(content: bytes, name: str) -> list[tuple[int, int]]:
+    """(start, end) byte offsets of every flight in the content of a blackbox file."""
+    starts = []
+    position = content.find(LOG_START)
+    while position != -1:
+        starts.append(position)
+        position = content.find(LOG_START, position + len(LOG_START))
+    if not starts:
+        raise LogError(f"{name} is not a blackbox log.")
+    return list(zip(starts, starts[1:] + [len(content)], strict=True))
+
+
+def _read(path: str | Path) -> tuple[Path, bytes]:
+    path = Path(path)
+    if not path.is_file():
+        raise LogError(f"Log file not found: {path}")
+    return path, path.read_bytes()
+
+
+def flight_sizes(path: str | Path) -> list[int]:
+    """Size in bytes of every flight stored in a blackbox file, in file order.
+
+    A flash chip dump holds one log per arming, most of them a few kilobytes of bench tests,
+    sometimes after a stretch of erased flash. Nothing is decoded here: one truncated flight
+    must not make the whole file unreadable.
+    """
+    path, content = _read(path)
+    return [end - start for start, end in _flight_spans(content, path.name)]
+
+
 def log_count(path: str | Path) -> int:
     """Number of flights stored in a blackbox file."""
-    return Parser.load(str(path)).reader.log_count
+    return len(flight_sizes(path))
+
+
+def longest_flight(path: str | Path) -> int:
+    """Index (1-based) of the largest flight of a file: the one worth tuning from."""
+    sizes = flight_sizes(path)
+    return sizes.index(max(sizes)) + 1
 
 
 def load_log(path: str | Path, log_index: int = 1) -> FlightLog:
     """Decode flight `log_index` (1-based) of a blackbox file."""
-    path = Path(path)
-    if not path.is_file():
-        raise LogError(f"Log file not found: {path}")
+    path, content = _read(path)
+    spans = _flight_spans(content, path.name)
+    if not 1 <= log_index <= len(spans):
+        raise LogError(f"{path.name} holds {len(spans)} flight(s); there is no flight {log_index}.")
+    start, end = spans[log_index - 1]
+
+    # orangebox locates flights from the first line of the file, which fails on dumps that
+    # start with erased flash or contain a truncated flight. It is given the one flight alone.
+    handle, single = tempfile.mkstemp(suffix=".bbl")
     try:
-        parser = Parser.load(str(path), log_index)
-    except Exception as exc:  # orangebox raises bare exceptions on malformed files
-        raise LogError(f"Cannot read blackbox log {path.name}: {exc}") from exc
+        with os.fdopen(handle, "wb") as out:
+            out.write(content[start:end])
+        try:
+            parser = Parser.load(single)
+        except Exception as exc:  # orangebox raises bare exceptions on malformed headers
+            raise LogError(
+                f"Flight {log_index} of {path.name} cannot be read, its header is damaged ({exc})."
+            ) from exc
+    finally:
+        os.unlink(single)
 
     names = parser.field_names
     index = {name: i for i, name in enumerate(names)}
@@ -101,13 +155,25 @@ def load_log(path: str | Path, log_index: int = 1) -> FlightLog:
     headers = dict(parser.headers)
     warnings: list[str] = []
     rows = []
+    reader = parser.reader
     try:
         for frame in parser.frames():
             rows.append([frame.data[col] for col in flat])
-    except Exception as exc:  # corrupted tail, e.g. battery pulled before the log was closed
-        warnings.append(f"Log decoding stopped early ({exc}); using the frames read so far.")
+    except Exception as exc:
+        # A log without end marker (battery pulled) fails on its last, partial frame: that is
+        # a normal ending. Failing earlier means the rest of the flight is lost.
+        total = getattr(reader, "_frame_data_len", end - start)  # frame bytes, headers excluded
+        unread = 1.0 - reader.tell() / max(1, total)
+        if unread > 0.02:
+            warnings.append(
+                f"Log is corrupted {1 - unread:.0%} of the way through ({exc}); "
+                "only the part before is analysed."
+            )
     if len(rows) < 100:
-        raise LogError("Log contains too few frames to analyse.")
+        raise LogError(
+            f"Flight {log_index} of {path.name} holds too few frames to analyse "
+            "(bench test or truncated log)."
+        )
     data = np.asarray(rows, dtype=float)
     position = {col: i for i, col in enumerate(flat)}
 
