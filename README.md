@@ -5,7 +5,7 @@ want it to fly (`freestyle`, `racing`, `cinematic`, `long_range`). The result is
 commands to paste in the Betaflight CLI.
 
 It comes as a web app (drop a log, read the result) and as a command-line tool. The web app
-runs online on Hugging Face Spaces and on the local network at http://s13.home:8787.
+runs online on Hugging Face Spaces and on the local network at http://192.168.1.15:8787 (S13).
 
 ## Install
 
@@ -172,7 +172,7 @@ Each merge into `master` (`.github/workflows/release.yml`) then:
    `:latest`, and tags the commit `vX.Y`;
 3. points the Hugging Face Space at that image (online version).
 
-S13 runs `deploy/s13/compose.yaml`: the app on port 8787 plus Watchtower, which picks up a new
+S13 (the Debian server at 192.168.1.15) runs `deploy/s13/compose.yaml`: the app on port 8787 plus Watchtower, which picks up a new
 `:latest` image within 5 minutes.
 
 ### One-time setup
@@ -184,9 +184,8 @@ S13 runs `deploy/s13/compose.yaml`: the app on port 8787 plus Watchtower, which 
   GitHub repo, add it as the `HF_TOKEN` secret and add an `HF_SPACE` variable such as
   `harantol/auto-pid-tuning` (Settings > Secrets and variables > Actions). The Space is
   created on the first release. Without `HF_SPACE`, that step is skipped.
-- **S13:** copy `deploy/s13/compose.yaml` to the NAS and start it once:
-  `sudo docker compose -f compose.yaml up -d` (or import it as a project in Container
-  Manager).
+- **S13:** copy `deploy/s13/compose.yaml` to `~/auto_pid_tuning/` on the server and start
+  it once there with `docker compose up -d`.
 
 To build and run the image locally: `docker build -t auto-pid-tuning .` then
 `docker run -p 7860:7860 auto-pid-tuning`.
