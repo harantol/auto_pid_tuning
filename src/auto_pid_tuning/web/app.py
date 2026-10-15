@@ -19,17 +19,25 @@ from ..blackbox import LogError, flight_sizes, load_log
 from ..report import flight_to_dict, tuning_to_dict
 from ..styles import STYLES
 from ..tuner import tune
+from ..version import get_version
 
 STATIC = Path(__file__).parent / "static"
 MAX_UPLOAD_BYTES = 128 * 1024 * 1024
 
-app = FastAPI(title="Betaflight auto-tuning")
+VERSION = get_version()
+
+app = FastAPI(title="Betaflight auto-tuning", version=VERSION)
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 
 @app.get("/", include_in_schema=False)
 def index() -> FileResponse:
     return FileResponse(STATIC / "index.html")
+
+
+@app.get("/api/version")
+def version() -> dict:
+    return {"version": VERSION}
 
 
 @app.get("/api/styles")

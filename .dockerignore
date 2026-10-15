@@ -1,0 +1,12 @@
+.git
+.venv
+.idea
+.claude
+samples
+tests
+deploy
+**/__pycache__
+*.bbl
+*.bfl
+*.BBL
+*.BFL

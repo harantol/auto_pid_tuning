@@ -44,3 +44,7 @@ select = ["E", "F", "I", "UP", "B"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["auto_pid_tuning", "conftest", "simulate"]
+
+
+[tool.uv.sources]
+orangebox = { path = "vendor/orangebox-0.5.0-py3-none-any.whl" }

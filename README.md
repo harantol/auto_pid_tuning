@@ -4,7 +4,8 @@ Suggests PIDs, filters and rates for a Betaflight quad from a blackbox log and t
 want it to fly (`freestyle`, `racing`, `cinematic`, `long_range`). The result is a list of
 commands to paste in the Betaflight CLI.
 
-It comes as a web app (drop a log, read the result) and as a command-line tool.
+It comes as a web app (drop a log, read the result) and as a command-line tool. The web app
+runs online on Hugging Face Spaces and on the local network at http://s13.home:8787.
 
 ## Install
 
@@ -15,9 +16,11 @@ Windows:
 powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
-Then, from the project folder:
+Then get the code and install it:
 
 ```
+git clone https://github.com/harantol/auto_pid_tuning.git
+cd auto_pid_tuning
 uv sync
 ```
 
@@ -152,3 +155,38 @@ uv run ruff check
 ```
 
 Sample logs go in `samples/` (git-ignored); tests that need them are skipped when absent.
+
+## Versions and deployment
+
+The version is `MAJOR.MINOR`, shown at the bottom of the web page and served at `/api/version`.
+
+- `MAJOR` is the number in the `VERSION` file. Edit it in a PR to start a new major version.
+- `MINOR` counts the merges into `master` since `VERSION` last changed, so each merged PR adds
+  one and bumping `MAJOR` resets it to 0. `python src/auto_pid_tuning/version.py` prints it.
+
+Changes go through pull requests on GitHub. Each PR runs the tests (`.github/workflows/ci.yml`).
+Each merge into `master` (`.github/workflows/release.yml`) then:
+
+1. runs the tests again and computes the version;
+2. builds the Docker image and pushes it to `ghcr.io/harantol/auto_pid_tuning` as `:X.Y` and
+   `:latest`, and tags the commit `vX.Y`;
+3. points the Hugging Face Space at that image (online version).
+
+S13 runs `deploy/s13/compose.yaml`: the app on port 8787 plus Watchtower, which picks up a new
+`:latest` image within 5 minutes.
+
+### One-time setup
+
+- **GHCR:** after the first release, make the package public (GitHub > Packages >
+  auto_pid_tuning > Package settings > Change visibility), so S13 and Hugging Face can pull it
+  without credentials.
+- **Hugging Face:** create a write token (huggingface.co > Settings > Access Tokens). In the
+  GitHub repo, add it as the `HF_TOKEN` secret and add an `HF_SPACE` variable such as
+  `harantol/auto-pid-tuning` (Settings > Secrets and variables > Actions). The Space is
+  created on the first release. Without `HF_SPACE`, that step is skipped.
+- **S13:** copy `deploy/s13/compose.yaml` to the NAS and start it once:
+  `sudo docker compose -f compose.yaml up -d` (or import it as a project in Container
+  Manager).
+
+To build and run the image locally: `docker build -t auto-pid-tuning .` then
+`docker run -p 7860:7860 auto-pid-tuning`.

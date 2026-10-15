@@ -22,6 +22,11 @@ def test_index_and_static_files():
         assert client.get(f"/static/{name}").status_code == 200
 
 
+def test_version():
+    version = client.get("/api/version").json()["version"]
+    assert version == app.version
+
+
 def test_styles():
     styles = client.get("/api/styles").json()
     assert [style["name"] for style in styles] == list(STYLES)

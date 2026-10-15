@@ -1,0 +1,20 @@
+# S13 (Synology): serves the latest image built from master on http://s13.home:8787.
+# Watchtower checks GHCR every 5 minutes and restarts the app on a new version.
+#   sudo docker compose -f compose.yaml up -d
+services:
+  app:
+    image: ghcr.io/harantol/auto_pid_tuning:latest
+    container_name: auto-pid-tuning
+    restart: unless-stopped
+    ports:
+      - "8787:7860"
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+
+  watchtower:
+    image: containrrr/watchtower:1.7.1
+    container_name: auto-pid-tuning-watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: --label-enable --interval 300 --cleanup

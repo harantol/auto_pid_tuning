@@ -67,7 +67,7 @@ dev = [
 requires-dist = [
     { name = "fastapi", specifier = ">=0.142.2" },
     { name = "numpy", specifier = ">=2.0" },
-    { name = "orangebox", specifier = ">=0.5.0" },
+    { name = "orangebox", path = "vendor/orangebox-0.5.0-py3-none-any.whl" },
     { name = "python-multipart", specifier = ">=0.0.32" },
     { name = "scipy", specifier = ">=1.11" },
     { name = "uvicorn", specifier = ">=0.54.0" },
@@ -429,10 +429,9 @@ wheels = [
 [[package]]
 name = "orangebox"
 version = "0.5.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/82/a8/9ca0d8f951b91c2ca493d8a2418d364409512990c656f0049e2931391f05/orangebox-0.5.0.tar.gz", hash = "sha256:e1b096e2b0e07edcb428a3a9c810faba4189f02d1ac36e0f3925b78289cec583", size = 41977, upload-time = "2026-05-16T14:10:24.643Z" }
+source = { path = "vendor/orangebox-0.5.0-py3-none-any.whl" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/04/d7/e87c820a1911c301e2679d7ff2594da8c830f5315d01e8bf518292e25a49/orangebox-0.5.0-py3-none-any.whl", hash = "sha256:a13d003a1caf13d84a422de1ca36fa0ad682e41a195ee207354c08fa5f451761", size = 34092, upload-time = "2026-05-16T14:10:23.125Z" },
+    { filename = "orangebox-0.5.0-py3-none-any.whl", hash = "sha256:de4faf37682d813038ef31f783c8925746ec1cd33cb7cbe4cc642dd5d47ae4eb" },
 ]
 
 [[package]]

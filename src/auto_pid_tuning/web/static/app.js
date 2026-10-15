@@ -319,4 +319,10 @@ window.addEventListener("resize", () => {
 });
 
 setupControls();
+async function loadVersion() {
+  const { version } = await (await fetch("/api/version")).json();
+  $("version").textContent = `v${version}`;
+}
+
 loadStyles();
+loadVersion();

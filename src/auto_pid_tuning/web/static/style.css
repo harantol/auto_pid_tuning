@@ -57,6 +57,13 @@ h3:first-child { margin-top: 4px; }
 
 .masthead p { margin: 6px 0 0; color: var(--text-secondary); max-width: 62ch; }
 
+.version {
+  padding: 0 16px 16px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
 /* Controls */
 .controls {
   display: flex;
