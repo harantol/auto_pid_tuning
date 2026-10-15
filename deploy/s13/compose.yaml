@@ -1,6 +1,7 @@
-# S13 (Synology): serves the latest image built from master on http://s13.home:8787.
+# S13 (Debian server, 192.168.1.15): serves the latest image built from master on
+# http://192.168.1.15:8787.
 # Watchtower checks GHCR every 5 minutes and restarts the app on a new version.
-#   sudo docker compose -f compose.yaml up -d
+#   docker compose up -d   (from the folder holding this file)
 services:
   app:
     image: ghcr.io/harantol/auto_pid_tuning:latest
@@ -15,6 +16,9 @@ services:
     image: containrrr/watchtower:1.7.1
     container_name: auto-pid-tuning-watchtower
     restart: unless-stopped
+    environment:
+      # Watchtower 1.7.1 defaults to Docker API 1.25, which Docker 29 refuses.
+      - DOCKER_API_VERSION=1.44
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     command: --label-enable --interval 300 --cleanup
