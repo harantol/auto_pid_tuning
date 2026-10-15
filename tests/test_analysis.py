@@ -6,9 +6,12 @@ import pytest
 from auto_pid_tuning.analysis import (
     analyze,
     band_rms,
+    longest_hold,
     noise_peak,
+    sharpest_move,
     step_response,
     stick_stats,
+    typical_dterm,
 )
 from simulate import flight
 
@@ -94,3 +97,50 @@ def test_analyze_reports_saturation_and_gentle_sticks(log_factory):
 
     assert analysis.motor_saturation == 1.0
     assert sum("too gentle" in warning for warning in analysis.warnings) == 3
+
+
+def test_sharpest_move_frames_the_step():
+    setpoint = np.zeros(2000)
+    setpoint[1200:] = 500.0  # one flick at 1.2 s
+    start, end = sharpest_move(setpoint, 1000.0)
+
+    assert end - start == 500
+    assert start < 1200 < start + 200  # the move sits near the start, the response after it
+    assert sharpest_move(np.zeros(2000), 1000.0) is None
+
+
+def test_sharpest_move_stays_inside_the_log():
+    setpoint = np.zeros(1000)
+    setpoint[960:] = 500.0
+    start, end = sharpest_move(setpoint, 1000.0)
+    assert (start, end) == (500, 1000)
+
+
+def test_longest_hold_finds_the_held_input():
+    setpoint = np.zeros(5000)
+    setpoint[1000:1300] = 600.0  # short and strong
+    setpoint[3000:3900] = -300.0  # long enough to settle
+    start, end = longest_hold(setpoint, 1000.0)
+    assert start <= 3000 and end >= 3600
+    assert longest_hold(np.full(5000, 5.0), 1000.0) is None
+
+
+def test_typical_dterm_skips_the_extremes():
+    rng = np.random.default_rng(0)
+    dterm = rng.normal(0, 5.0, (10000, 2))
+    dterm[2000:2500] *= 10  # a burst of noise
+    start, end = typical_dterm(dterm, np.ones(10000, dtype=bool), 1000.0)
+    assert end - start == 250
+    assert not 1750 < start < 2500
+    assert typical_dterm(np.zeros((10000, 2)), np.ones(10000, dtype=bool), 1000.0) is None
+
+
+def test_analyze_keeps_excerpts(log_factory):
+    analysis = analyze(log_factory(damping=0.5))
+
+    for axis in ("roll", "pitch", "yaw"):
+        move = analysis.excerpts[f"move_{axis}"]
+        assert len(move.time) == 500 and move.time[0] == 0.0
+        assert set(move.series) == {"setpoint", "gyro"}
+        assert f"hold_{axis}" in analysis.excerpts
+    assert set(analysis.excerpts["dterm"].series) == {"roll", "pitch"}

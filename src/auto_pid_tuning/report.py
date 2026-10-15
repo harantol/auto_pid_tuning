@@ -53,6 +53,14 @@ def flight_to_dict(headers: dict[str, Any], analysis: FlightAnalysis) -> dict:
         "sample_rate": analysis.sample_rate,
         "motor_saturation": analysis.motor_saturation,
         "axes": axes,
+        "excerpts": {
+            name: {
+                "start": excerpt.start,
+                "time": excerpt.time.tolist(),
+                "series": {key: values.tolist() for key, values in excerpt.series.items()},
+            }
+            for name, excerpt in analysis.excerpts.items()
+        },
         "spectrum": {
             "hz": analysis.spectrum_hz.tolist(),
             **{axis: values.tolist() for axis, values in analysis.gyro_spectrum.items()},
@@ -68,6 +76,8 @@ def tuning_to_dict(result: TuningResult) -> dict:
         "description": style.description,
         "peak_min": style.peak_min,
         "peak_max": style.peak_max,
+        "noise_low": style.noise_low,
+        "noise_high": style.noise_high,
         "changes": [
             {
                 "group": change.group,
@@ -75,9 +85,11 @@ def tuning_to_dict(result: TuningResult) -> dict:
                 "current": change.current,
                 "suggested": change.suggested,
                 "reason": change.reason,
+                "evidence": change.evidence,
             }
             for change in result.changes
         ],
+        "evidence": result.evidence,
         "notes": result.notes,
         "cli": result.cli_commands(),
     }

@@ -56,6 +56,10 @@ def test_analyze_real_log():
     assert set(payload["tunes"]) == set(STYLES)
     assert payload["tunes"]["cinematic"]["cli"][-1] == "save"
     assert payload["tunes"]["cinematic"]["peak_max"] == STYLES["cinematic"].peak_max
+    # Every chart a change points to is in the payload.
+    for tune in payload["tunes"].values():
+        charts = set(payload["excerpts"]) | set(tune["evidence"])
+        assert {change["evidence"] for change in tune["changes"]} <= charts | {None}
     assert len(payload["spectrum"]["hz"]) == len(payload["spectrum"]["roll"]) > 10
     assert payload["axes"]["yaw"]["step_response"]["valid"] is True
 

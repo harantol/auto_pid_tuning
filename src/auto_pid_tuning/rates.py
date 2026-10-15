@@ -45,6 +45,18 @@ def current_rates(headers: dict[str, Any]) -> list[AxisRates] | None:
     return None
 
 
+def rate_curve(headers: dict[str, Any], index: int, sticks: list[float]) -> list[float] | None:
+    """Commanded deg/s of axis `index` at each stick deflection, with the rates as flown."""
+    if current_rates(headers) is None:
+        return None
+    rc_rate = float(headers["rc_rates"][index])
+    top = float(headers["rates"][index])
+    expo = float(headers["rc_expo"][index]) / 100.0
+    if headers.get("rates_type", RATES_BETAFLIGHT) == RATES_ACTUAL:
+        return [actual_rate(x, rc_rate * 10.0, max(top, rc_rate) * 10.0, expo) for x in sticks]
+    return [betaflight_rate(x, rc_rate, top, expo) for x in sticks]
+
+
 def _betaflight_rc_rate(rc_rate: float) -> float:
     rc_rate /= 100.0
     if rc_rate > 2.0:

@@ -13,7 +13,7 @@ import numpy as np
 
 from .analysis import FlightAnalysis, StepResponse
 from .blackbox import AXES, firmware_version
-from .rates import RATES_ACTUAL, current_rates
+from .rates import RATES_ACTUAL, actual_rate, current_rates, rate_curve
 from .styles import Style
 
 MAX_STEP = 0.15  # largest relative change of a gain or cutoff in one pass
@@ -25,6 +25,7 @@ I_LIMITS = (10, 200)
 D_LIMITS = (0, 100)
 GYRO_LPF_LIMITS = (50, 1000)
 DTERM_LPF_LIMITS = (40, 300)
+RATE_CURVE_POINTS = 41
 
 # (CLI name, log header, index in the header value or None) per firmware generation.
 _FILTERS_4_3 = {
@@ -64,6 +65,10 @@ class Change:
     current: int | str | None
     suggested: int | str
     reason: str
+    # Id of the chart that shows why: an analysis excerpt ("move_roll", "hold_roll", "dterm")
+    # or an entry of TuningResult.evidence ("notch", "rates_roll"). None for switches that
+    # only make other changes possible.
+    evidence: str | None = None
 
     @property
     def cli(self) -> str:
@@ -75,6 +80,7 @@ class TuningResult:
     style: Style
     changes: list[Change] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
+    evidence: dict[str, dict[str, Any]] = field(default_factory=dict)  # style-dependent charts
 
     def cli_commands(self) -> list[str]:
         """Commands to paste in the Betaflight CLI; empty when nothing changes."""
@@ -101,7 +107,9 @@ def tune(headers: dict[str, Any], analysis: FlightAnalysis, style: Style) -> Tun
     pid_changes: list[Change] = []
     for index, axis in enumerate(AXES):
         noisy = analysis.noise[axis].dterm_rms > style.noise_high
-        pid_changes += _tune_pid(headers, index, axis, analysis.step[axis], style, noisy, saturated)
+        pid_changes += _tune_pid(
+            headers, index, axis, analysis.step[axis], style, noisy, saturated, analysis.excerpts
+        )
     if pid_changes and modern and headers.get("simplified_pids_mode", 0):
         pid_changes.insert(
             0,
@@ -115,8 +123,12 @@ def tune(headers: dict[str, Any], analysis: FlightAnalysis, style: Style) -> Tun
         )
     result.changes += pid_changes
     result.changes += _tune_filters(headers, analysis, style, modern, result.notes)
+    if any(change.evidence == "notch" for change in result.changes):
+        result.evidence["notch"] = {
+            "range": [headers.get("dyn_notch_min_hz"), headers.get("dyn_notch_max_hz")]
+        }
     if version >= (4, 2):
-        result.changes += _tune_rates(headers, analysis, style, result.notes)
+        result.changes += _tune_rates(headers, analysis, style, result.notes, result.evidence)
     else:
         result.notes.append("Rates are left untouched: Actual rates need Betaflight 4.2 or newer.")
 
@@ -144,6 +156,7 @@ def _tune_pid(
     style: Style,
     noisy: bool,
     saturated: bool,
+    excerpts: dict[str, Any],
 ) -> list[Change]:
     gains = headers.get(f"{axis}PID")
     if step is None or not step.valid or not isinstance(gains, (list, tuple)) or len(gains) < 3:
@@ -153,8 +166,19 @@ def _tune_pid(
     changes: list[Change] = []
 
     def change(name: str, current: int, suggested: int, reason: str) -> None:
+        # I shows on a held stick, everything else on the sharpest move.
+        evidence = f"{'hold' if name == 'i' else 'move'}_{axis}"
         if suggested != current:
-            changes.append(Change("pid", f"{name}_{axis}", current, suggested, reason))
+            changes.append(
+                Change(
+                    "pid",
+                    f"{name}_{axis}",
+                    current,
+                    suggested,
+                    reason,
+                    evidence if evidence in excerpts else None,
+                )
+            )
 
     feedforward = _indexed(headers.get("ff_weight", headers.get("feedforward_weight")), index)
     ff_low, ff_high = style.feedforward_range
@@ -237,6 +261,7 @@ def _tune_filters(
             action = "lower cutoffs, cooler motors" if scale < 1 else "higher cutoffs, less delay"
             reason = f"{reason} ({noise:.1f} RMS) for {style.name}; {action}."
             table = _FILTERS_4_3 if modern else _FILTERS_LEGACY
+            evidence = "dterm" if "dterm" in analysis.excerpts else None
             for kind, limits in (("gyro", GYRO_LPF_LIMITS), ("dterm", DTERM_LPF_LIMITS)):
                 scaled = []
                 for param, header, position in table[kind]:
@@ -246,7 +271,9 @@ def _tune_filters(
                         continue
                     suggested = int(np.clip(5 * round(current * scale / 5), *limits))
                     if suggested != current:
-                        scaled.append(Change("filter", param, int(current), suggested, reason))
+                        scaled.append(
+                            Change("filter", param, int(current), suggested, reason, evidence)
+                        )
                 slider = f"simplified_{kind}_filter"
                 if scaled and modern and headers.get(slider):
                     scaled.insert(
@@ -257,6 +284,7 @@ def _tune_filters(
                             headers[slider],
                             "OFF",
                             "Slider must be off, otherwise it overwrites the cutoffs.",
+                            evidence,
                         ),
                     )
                 changes += scaled
@@ -286,6 +314,7 @@ def _tune_dynamic_notch(
                     int(low),
                     suggested,
                     f"A noise peak at {min(peaks):.0f} Hz sits below the dynamic notch range.",
+                    "notch",
                 )
             )
     if max(peaks) > high:
@@ -298,13 +327,18 @@ def _tune_dynamic_notch(
                     int(high),
                     suggested,
                     f"A noise peak at {max(peaks):.0f} Hz sits above the dynamic notch range.",
+                    "notch",
                 )
             )
     return changes
 
 
 def _tune_rates(
-    headers: dict[str, Any], analysis: FlightAnalysis, style: Style, notes: list[str]
+    headers: dict[str, Any],
+    analysis: FlightAnalysis,
+    style: Style,
+    notes: list[str],
+    evidence: dict[str, dict[str, Any]],
 ) -> list[Change]:
     current = current_rates(headers)
     is_actual = headers.get("rates_type") == RATES_ACTUAL
@@ -370,8 +404,16 @@ def _tune_rates(
                         before,
                         int(suggested),
                         f"{style.name.capitalize()} {axis}: {text}.",
+                        f"rates_{axis}",
                     )
                 )
+        if any(change.evidence == f"rates_{axis}" for change in changes):
+            sticks = [step / (RATE_CURVE_POINTS - 1) for step in range(RATE_CURVE_POINTS)]
+            evidence[f"rates_{axis}"] = {
+                "stick": sticks,
+                "current": rate_curve(headers, index, sticks),
+                "suggested": [actual_rate(x, center, max_rate, expo) for x in sticks],
+            }
     return changes
 
 

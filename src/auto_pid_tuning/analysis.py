@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 import numpy as np
-from scipy import signal
+from scipy import ndimage, signal
 
 from .blackbox import AXES, FlightLog
 
@@ -23,6 +23,13 @@ MAX_BANDWIDTH_HZ = 100.0
 NOISE_BAND_HZ = 100.0  # content above this is considered noise, not flight dynamics
 MIN_THROTTLE = 0.05  # samples below this are treated as "on the ground"
 MOTOR_SATURATION = 0.98
+
+# Excerpts: short stretches of the log shown next to the changes they justify
+MOVE_SPAN_S = 0.05  # a stick move is the setpoint change over this span
+MOVE_BEFORE_S, MOVE_AFTER_S = 0.1, 0.4
+HOLD_S = 0.6  # a hold is the setpoint staying on one side of zero for this long
+HOLD_MARGIN_S = 0.2
+DTERM_WINDOW_S = 0.25
 
 
 @dataclass
@@ -64,6 +71,15 @@ class StickStats:
 
 
 @dataclass
+class Excerpt:
+    """A short stretch of the log that shows what a measurement is about."""
+
+    start: float  # seconds from the start of the log
+    time: np.ndarray  # seconds from the start of the excerpt
+    series: dict[str, np.ndarray]
+
+
+@dataclass
 class FlightAnalysis:
     duration: float
     sample_rate: float
@@ -75,6 +91,8 @@ class FlightAnalysis:
     spectrum_hz: np.ndarray = field(default_factory=lambda: np.zeros(0))
     gyro_spectrum: dict[str, np.ndarray] = field(default_factory=dict)  # deg/s per sqrt(Hz)
     warnings: list[str] = field(default_factory=list)
+    # "move_<axis>", "hold_<axis>" and "dterm", when the flight holds one
+    excerpts: dict[str, Excerpt] = field(default_factory=dict)
 
 
 def analyze(log: FlightLog) -> FlightAnalysis:
@@ -90,6 +108,7 @@ def analyze(log: FlightLog) -> FlightAnalysis:
     noise: dict[str, NoiseStats] = {}
     sticks: dict[str, StickStats] = {}
     spectra: dict[str, np.ndarray] = {}
+    excerpts: dict[str, Excerpt] = {}
     freqs = np.zeros(0)
     for i, axis in enumerate(AXES):
         response = step_response(log.setpoint[:, i], log.gyro[:, i], fs)
@@ -104,6 +123,15 @@ def analyze(log: FlightLog) -> FlightAnalysis:
         noise[axis] = noise_stats(log.gyro[flying, i], log.pid_d[flying, i], fs, unfiltered)
         freqs, spectra[axis] = spectrum(log.gyro[flying, i], fs)
         sticks[axis] = stick_stats(log.setpoint[:, i])
+        for name, excerpt in (("move", sharpest_move), ("hold", longest_hold)):
+            span = excerpt(log.setpoint[:, i], fs)
+            if span is not None:
+                excerpts[f"{name}_{axis}"] = _cut(
+                    log, span, setpoint=log.setpoint[:, i], gyro=log.gyro[:, i]
+                )
+    span = typical_dterm(log.pid_d[:, :2], flying, fs)
+    if span is not None:
+        excerpts["dterm"] = _cut(log, span, roll=log.pid_d[:, 0], pitch=log.pid_d[:, 1])
 
     saturation = 0.0
     if log.motors.shape[1]:
@@ -123,6 +151,7 @@ def analyze(log: FlightLog) -> FlightAnalysis:
         spectrum_hz=freqs,
         gyro_spectrum=spectra,
         warnings=warnings,
+        excerpts=excerpts,
     )
 
 
@@ -241,3 +270,72 @@ def stick_stats(setpoint: np.ndarray) -> StickStats:
     magnitude = np.abs(setpoint)
     p50, p95, p995 = np.percentile(magnitude, [50, 95, 99.5])
     return StickStats(float(magnitude.max()), float(p50), float(p95), float(p995))
+
+
+def sharpest_move(setpoint: np.ndarray, fs: float) -> tuple[int, int] | None:
+    """(start, end) samples around the fastest stick move: where overshoot shows."""
+    span = max(1, int(MOVE_SPAN_S * fs))
+    if len(setpoint) <= span:
+        return None
+    change = np.abs(setpoint[span:] - setpoint[:-span])
+    at = int(np.argmax(change))
+    if change[at] < MIN_INPUT_DPS:
+        return None
+    return _window(at - int(MOVE_BEFORE_S * fs), at + int(MOVE_AFTER_S * fs), len(setpoint))
+
+
+def longest_hold(setpoint: np.ndarray, fs: float) -> tuple[int, int] | None:
+    """(start, end) samples around the strongest held stick input: where I shows.
+
+    The hold is the stretch of HOLD_S whose weakest setpoint, on one side of zero, is the
+    largest: the gyro should settle on it.
+    """
+    length = int(HOLD_S * fs)
+    if len(setpoint) <= length:
+        return None
+    best, at = 0.0, 0
+    for side in (setpoint, -setpoint):
+        weakest = ndimage.minimum_filter1d(side, length, origin=-(length // 2))[: -length + 1]
+        index = int(np.argmax(weakest))
+        if weakest[index] > best:
+            best, at = float(weakest[index]), index
+    if best < MIN_INPUT_DPS:
+        return None
+    margin = int(HOLD_MARGIN_S * fs)
+    return _window(at - margin, at + length + margin, len(setpoint))
+
+
+def typical_dterm(dterm: np.ndarray, flying: np.ndarray, fs: float) -> tuple[int, int] | None:
+    """(start, end) samples of an airborne stretch whose D-term noise is the flight's typical.
+
+    Noise is the D-term content above NOISE_BAND_HZ, as in noise_stats(); the stretch shown
+    is the one whose level is closest to the median, not a cherry-picked worst case.
+    """
+    length = int(DTERM_WINDOW_S * fs)
+    if fs <= 2.5 * NOISE_BAND_HZ or len(dterm) < 4 * length or not np.any(dterm):
+        return None
+    sos = signal.butter(4, NOISE_BAND_HZ, "highpass", fs=fs, output="sos")
+    power = (signal.sosfiltfilt(sos, dterm, axis=0) ** 2).sum(axis=1)
+    level = ndimage.uniform_filter1d(power, length, origin=-(length // 2))[: -length + 1]
+    airborne = ndimage.minimum_filter1d(flying.astype(float), length, origin=-(length // 2))
+    candidates = np.nonzero(airborne[: -length + 1] > 0)[0]
+    if not len(candidates):
+        return None
+    median = np.median(level[candidates])
+    at = int(candidates[np.argmin(np.abs(level[candidates] - median))])
+    return at, at + length
+
+
+def _window(start: int, end: int, size: int) -> tuple[int, int]:
+    """Shift [start, end) inside [0, size) without changing its length when possible."""
+    shift = max(0, -start) - max(0, end - size)
+    return max(0, start + shift), min(size, end + shift)
+
+
+def _cut(log: FlightLog, span: tuple[int, int], **series: np.ndarray) -> Excerpt:
+    start, end = span
+    return Excerpt(
+        start=float(log.time[start]),
+        time=log.time[start:end] - log.time[start],
+        series={name: values[start:end].copy() for name, values in series.items()},
+    )
