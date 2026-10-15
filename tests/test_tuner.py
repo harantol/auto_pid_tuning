@@ -3,7 +3,13 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from auto_pid_tuning.analysis import FlightAnalysis, NoiseStats, StepResponse, StickStats
+from auto_pid_tuning.analysis import (
+    Excerpt,
+    FlightAnalysis,
+    NoiseStats,
+    StepResponse,
+    StickStats,
+)
 from auto_pid_tuning.styles import get_style
 from auto_pid_tuning.tuner import MAX_STEP, tune
 
@@ -226,3 +232,30 @@ def test_unknown_style():
         get_style("acro-ballet")
     assert get_style("Cine").name == "cinematic"
     assert get_style("long-range").name == "long_range"
+
+
+def test_changes_point_to_their_evidence(headers):
+    analysis = make_analysis(peak=1.25, steady=0.85, dterm_rms=40.0)
+    blank = Excerpt(0.0, np.zeros(1), {})
+    analysis.excerpts = {name: blank for name in ("move_roll", "hold_roll", "dterm")}
+    changes = by_param(tune(headers, analysis, get_style("freestyle")))
+
+    assert changes["p_roll"].evidence == "move_roll"  # noisy D-term: overshoot lowers P
+    assert changes["i_roll"].evidence == "hold_roll"
+    assert changes["p_pitch"].evidence is None  # no excerpt for pitch: no chart
+    assert changes["gyro_lpf1_static_hz"].evidence == "dterm"
+    assert changes["simplified_pids_mode"].evidence is None
+
+
+def test_rate_and_notch_evidence(headers):
+    result = tune(headers, make_analysis(peak_hz=110.0), get_style("cinematic"))
+    changes = by_param(result)
+
+    assert changes["dyn_notch_min_hz"].evidence == "notch"
+    notch = [headers["dyn_notch_min_hz"], headers["dyn_notch_max_hz"]]
+    assert result.evidence["notch"]["range"] == notch
+    assert changes["roll_srate"].evidence == "rates_roll"
+    curves = result.evidence["rates_roll"]
+    assert curves["stick"][0] == 0.0 and curves["stick"][-1] == 1.0
+    assert curves["current"][-1] == pytest.approx(800.0)  # flown max rate
+    assert curves["suggested"][-1] == pytest.approx(600.0)

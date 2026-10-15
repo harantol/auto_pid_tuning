@@ -84,7 +84,11 @@ and stop it with `Ctrl+C`.
   100 Hz line is noise that ends up heating the motors.
 - **Measured**: the same information as numbers, per axis.
 - **Suggested changes**: each setting with its current value, the suggested one and the
-  reason, grouped as PIDs, filters and rates.
+  reason, grouped as PIDs, filters and rates. Each reason links to a figure (*Fig. 1*, ...) showing the
+  part of the log behind it: the sharpest stick move of the axis (setpoint against gyro) for
+  P, D and feedforward, the longest held stick for I, a typical stretch of D-term for the
+  lowpass filters, the spectrum against the notch range for the dynamic notch, and the
+  current and suggested rate curves against the stick range you actually used for rates.
 - **Notes**: what could not be measured and what to watch for.
 
 ### 5. Apply and iterate

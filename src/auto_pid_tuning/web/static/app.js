@@ -128,7 +128,7 @@ function render() {
   renderTiles(data, tune);
   renderCharts(data, tune);
   renderMeasured(data);
-  renderChanges(tune);
+  renderChanges(data, tune);
   renderNotes(tune);
   renderCli(tune);
 }
@@ -178,7 +178,8 @@ function legend(target, entries) {
   for (const entry of entries) {
     const item = el("span", `legend-item${entry.off ? " off" : ""}`);
     const key = el("span", entry.band ? "key band" : "key");
-    if (!entry.band) key.style.background = COLORS[entry.axis];
+    if (!entry.band) key.style.background = entry.color || COLORS[entry.axis];
+    if (entry.dash) key.classList.add("dash");
     item.append(key, el("span", "", entry.text));
     target.appendChild(item);
   }
@@ -260,13 +261,18 @@ function renderMeasured(data) {
   }
 }
 
-function renderChanges(tune) {
+function renderChanges(data, tune) {
   const target = $("changes");
   target.replaceChildren();
   if (!tune.changes.length) {
     target.appendChild(el("p", "nothing",
       `Nothing to change: this tune already fits ${styleLabel(tune.style).toLowerCase()} flying.`));
     return;
+  }
+  // Figures are numbered across groups, in the order their first change appears.
+  const figures = [];
+  for (const change of tune.changes) {
+    if (change.evidence && !figures.includes(change.evidence)) figures.push(change.evidence);
   }
   for (const [group, title] of GROUPS) {
     const changes = tune.changes.filter((change) => change.group === group);
@@ -285,12 +291,18 @@ function renderChanges(tune) {
     const body = el("tbody");
     for (const change of changes) {
       const row = el("tr");
+      const reason = el("td", "reason", change.reason);
+      if (change.evidence) {
+        const link = el("a", "figure-link", `Fig. ${figures.indexOf(change.evidence) + 1}`);
+        link.href = `#figure-${change.evidence}`;
+        reason.append(" ", link);
+      }
       row.append(
         el("td", "param", change.param),
         el("td", "num", change.current === null ? "?" : String(change.current)),
         el("td", "arrow", "→"),
         el("td", "num suggested", String(change.suggested)),
-        el("td", "reason", change.reason),
+        reason,
       );
       row.children[3].style.textAlign = "left";
       body.appendChild(row);
@@ -298,7 +310,204 @@ function renderChanges(tune) {
     table.append(thead, body);
     wrap.appendChild(table);
     target.appendChild(wrap);
+
+    const shown = figures.filter((id) => changes.some((change) => change.evidence === id));
+    const grid = el("div", "evidence");
+    for (const id of shown) {
+      const justified = tune.changes.filter((change) => change.evidence === id);
+      const figure = evidenceFigure(id, figures.indexOf(id) + 1, justified, data, tune);
+      if (figure) grid.appendChild(figure);
+    }
+    if (grid.children.length) target.appendChild(grid);
   }
+}
+
+// ---- Evidence: the part of the log behind each change ------------------------------------
+
+function clock(seconds) {
+  const whole = Math.floor(seconds);
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
+}
+
+function percent(ratio) {
+  const value = (ratio - 1) * 100;
+  return `${value >= 0 ? "+" : ""}${value.toFixed(0)}%`;
+}
+
+const MS = { xTitle: "Time (ms)", xFormat: (v, full) => (full ? `${v.toFixed(0)} ms` : v.toFixed(0)) };
+const DPS = (v, full) => (full ? `${v.toFixed(0)} deg/s` : v.toFixed(0));
+
+// Each builder returns {title, caption, legend, chart} for one evidence id, or null.
+const EVIDENCE = {
+  move(axis, data, tune) {
+    const excerpt = data.excerpts[`move_${axis}`];
+    const step = data.axes[axis].step_response;
+    const measured = step && step.valid
+      ? ` Averaged over the whole flight, ${axis} peaks at ${percent(step.peak)} for a target of `
+        + `${percent(tune.peak_min)} to ${percent(tune.peak_max)}.`
+      : "";
+    return {
+      title: `Sharpest ${axis} move, at ${clock(excerpt.start)}`,
+      caption: "The dashed line is what the sticks asked for, the solid one what the quad did. "
+        + "Going past the dashed line and swinging back is overshoot; trailing behind it is a "
+        + `slow response.${measured}`,
+      legend: [
+        { color: "var(--text-secondary)", dash: true, text: "Setpoint" },
+        { axis, text: `${styleLabel(axis)} gyro` },
+      ],
+      chart: {
+        label: `Setpoint and gyro of ${axis} during its sharpest move`,
+        x: excerpt.time.map((t) => t * 1000),
+        series: [
+          { name: "Setpoint", color: "var(--text-secondary)", dash: true, y: excerpt.series.setpoint },
+          { name: "Gyro", color: COLORS[axis], y: excerpt.series.gyro },
+        ],
+        xDomain: [0, excerpt.time[excerpt.time.length - 1] * 1000],
+        ...MS,
+        yFormat: DPS,
+        hline: 0,
+      },
+    };
+  },
+
+  hold(axis, data) {
+    const excerpt = data.excerpts[`hold_${axis}`];
+    const step = data.axes[axis].step_response;
+    const measured = step && step.valid
+      ? ` Over the whole flight it settles at ${(step.steady_state * 100).toFixed(0)}% of the setpoint.`
+      : "";
+    return {
+      title: `Longest ${axis} hold, at ${clock(excerpt.start)}`,
+      caption: "While the stick is held, the gyro should settle on the setpoint. Staying below it "
+        + `means not enough I to hold the rate against drag and wind.${measured}`,
+      legend: [
+        { color: "var(--text-secondary)", dash: true, text: "Setpoint" },
+        { axis, text: `${styleLabel(axis)} gyro` },
+      ],
+      chart: {
+        label: `Setpoint and gyro of ${axis} during its longest held input`,
+        x: excerpt.time.map((t) => t * 1000),
+        series: [
+          { name: "Setpoint", color: "var(--text-secondary)", dash: true, y: excerpt.series.setpoint },
+          { name: "Gyro", color: COLORS[axis], y: excerpt.series.gyro },
+        ],
+        xDomain: [0, excerpt.time[excerpt.time.length - 1] * 1000],
+        ...MS,
+        yFormat: DPS,
+        hline: 0,
+      },
+    };
+  },
+
+  dterm(_, data, tune) {
+    const excerpt = data.excerpts.dterm;
+    const noise = Math.max(data.axes.roll.noise.dterm_rms, data.axes.pitch.noise.dterm_rms);
+    return {
+      title: `Typical D-term, at ${clock(excerpt.start)}`,
+      caption: "A quarter of a second picked for its typical noise level. The slow swings are the "
+        + "quad moving; the fast jitter on top is noise that the filters let through, which heats "
+        + `the motors. Its level over the flight is ${noise.toFixed(1)}, and `
+        + `${styleLabel(tune.style).toLowerCase()} keeps it between ${tune.noise_low} and ${tune.noise_high}.`,
+      legend: ["roll", "pitch"].map((axis) => ({ axis, text: `${styleLabel(axis)} D-term` })),
+      chart: {
+        label: "D-term of roll and pitch over a typical quarter second",
+        x: excerpt.time.map((t) => t * 1000),
+        series: ["roll", "pitch"].map((axis) => ({
+          name: styleLabel(axis), color: COLORS[axis], y: excerpt.series[axis],
+        })),
+        xDomain: [0, excerpt.time[excerpt.time.length - 1] * 1000],
+        ...MS,
+        yFormat: (v) => v.toFixed(0),
+        hline: 0,
+      },
+    };
+  },
+
+  notch(_, data, tune) {
+    const [low, high] = tune.evidence.notch.range;
+    const peaks = ["roll", "pitch"]
+      .map((axis) => data.axes[axis].noise.peak_hz)
+      .filter((hz) => hz !== null);
+    const hz = data.spectrum.hz;
+    return {
+      title: "Noise peak and dynamic notch range",
+      caption: `The dynamic notch only follows noise inside the shaded range (${low}-${high} Hz). `
+        + "A peak outside it goes through unfiltered, so the range is widened to reach it.",
+      legend: ["roll", "pitch"].map((axis) => ({ axis, text: `${styleLabel(axis)} gyro` })),
+      chart: {
+        label: "Gyro noise spectrum with the dynamic notch range",
+        x: hz,
+        series: ["roll", "pitch"].map((axis) => ({
+          name: styleLabel(axis), color: COLORS[axis], y: data.spectrum[axis],
+        })),
+        xDomain: [0, hz.length ? hz[hz.length - 1] : 500],
+        yLog: true,
+        xBand: { from: low, to: high },
+        vlines: peaks.map((peak) => ({ x: peak, label: `${peak.toFixed(0)} Hz` })),
+        xTitle: "Frequency (Hz)",
+        xFormat: (v, full) => (full ? `${v.toFixed(0)} Hz` : v.toFixed(0)),
+        yFormat: (v, full) => (full ? v.toPrecision(2) : String(v)),
+      },
+    };
+  },
+
+  rates(axis, data, tune) {
+    const curves = tune.evidence[`rates_${axis}`];
+    const sticks = data.axes[axis].sticks;
+    const series = [];
+    if (curves.current) {
+      series.push({ name: "Current", color: "var(--text-secondary)", dash: true, y: curves.current });
+    }
+    series.push({ name: "Suggested", color: COLORS[axis], y: curves.suggested });
+    const top = Math.max(...curves.suggested, ...(curves.current || []), sticks.max_rate);
+    return {
+      title: `${styleLabel(axis)} rate curve`,
+      caption: "Rotation speed asked for at each stick position. The shaded band is where the "
+        + `sticks stayed 95% of the flight (up to ${sticks.p95.toFixed(0)} deg/s); the fastest `
+        + `command was ${sticks.max_rate.toFixed(0)} deg/s. A gentler centre gives finer control `
+        + "there, the end of the curve keeps the flips.",
+      legend: [
+        ...(curves.current ? [{ color: "var(--text-secondary)", dash: true, text: "Current" }] : []),
+        { axis, text: "Suggested" },
+        { band: true, text: "95% of the flight" },
+      ],
+      chart: {
+        label: `Current and suggested ${axis} rate curves`,
+        x: curves.stick.map((x) => x * 100),
+        series,
+        xDomain: [0, 100],
+        yDomain: [0, Math.ceil(top / 100) * 100],
+        band: { from: 0, to: sticks.p95 },
+        xTitle: "Stick deflection (%)",
+        xFormat: (v, full) => (full ? `${v.toFixed(0)}% stick` : v.toFixed(0)),
+        yFormat: DPS,
+      },
+    };
+  },
+};
+
+function evidenceFigure(id, number, justified, data, tune) {
+  const [kind, axis] = id.split("_");
+  const build = EVIDENCE[kind];
+  const spec = build ? build(axis, data, tune) : null;
+  if (!spec) return null;
+  const figure = el("figure", "card evidence-figure");
+  figure.id = `figure-${id}`;
+  figure.appendChild(el("h4", "", `Fig. ${number} · ${spec.title}`));
+  figure.appendChild(el("p", "card-sub", spec.caption));
+  const why = el("p", "justifies", "Justifies ");
+  justified.forEach((change, k) => {
+    if (k) why.append(", ");
+    why.appendChild(el("code", "", change.param));
+  });
+  figure.appendChild(why);
+  const keys = el("div", "legend");
+  legend(keys, spec.legend);
+  const chart = el("div", "chart");
+  figure.append(keys, chart);
+  // The chart is sized from its container: draw it once the figure is in the page.
+  requestAnimationFrame(() => lineChart(chart, spec.chart));
+  return figure;
 }
 
 function renderNotes(tune) {
@@ -315,7 +524,12 @@ function renderCli(tune) {
 let resizeTimer = null;
 window.addEventListener("resize", () => {
   clearTimeout(resizeTimer);
-  resizeTimer = setTimeout(() => { if (state.data) renderCharts(state.data, state.data.tunes[state.style]); }, 150);
+  resizeTimer = setTimeout(() => {
+    if (!state.data) return;
+    const tune = state.data.tunes[state.style];
+    renderCharts(state.data, tune);
+    renderChanges(state.data, tune);
+  }, 150);
 });
 
 setupControls();

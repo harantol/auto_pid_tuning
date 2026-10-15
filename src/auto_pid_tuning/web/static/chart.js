@@ -23,10 +23,11 @@ function niceTicks(min, max, count) {
 
 /**
  * options: {
- *   series: [{name, color, y: number[]}], x: number[],
+ *   series: [{name, color, y: number[], dash?: boolean}], x: number[],
  *   xDomain: [min, max], yDomain?: [min, max], yLog?: boolean,
  *   xTitle, yTitle, xFormat, yFormat,
- *   band?: {from, to}, hline?: number, vline?: {x, label}, empty?: string
+ *   band?: {from, to}, xBand?: {from, to}, hline?: number,
+ *   vline?: {x, label}, vlines?: [{x, label}], empty?: string
  * }
  */
 function lineChart(container, options) {
@@ -75,6 +76,15 @@ function lineChart(container, options) {
     }, svg);
   }
 
+  if (options.xBand) {
+    const left = sx(Math.max(options.xBand.from, x0));
+    const right = sx(Math.min(options.xBand.to, x1));
+    svgEl("rect", {
+      x: left, y: margin.top, width: Math.max(0, right - left), height: plotH,
+      fill: "var(--text-muted)", opacity: 0.16,
+    }, svg);
+  }
+
   // Grid and ticks
   let yTicks;
   if (options.yLog) {
@@ -110,12 +120,14 @@ function lineChart(container, options) {
     const y = sy(options.hline);
     svgEl("line", { x1: margin.left, x2: margin.left + plotW, y1: y, y2: y, stroke: "var(--axis)" }, svg);
   }
-  if (options.vline && options.vline.x > x0 && options.vline.x < x1) {
-    const x = sx(options.vline.x);
+  const vlines = [...(options.vline ? [options.vline] : []), ...(options.vlines || [])];
+  vlines.forEach((line, k) => {
+    if (line.x <= x0 || line.x >= x1) return;
+    const x = sx(line.x);
     svgEl("line", { x1: x, x2: x, y1: margin.top, y2: margin.top + plotH, stroke: "var(--axis)" }, svg);
-    const label = svgEl("text", { x: x + 5, y: margin.top + 10, class: "annotation" }, svg);
-    label.textContent = options.vline.label;
-  }
+    const label = svgEl("text", { x: x + 5, y: margin.top + 10 + 14 * k, class: "annotation" }, svg);
+    label.textContent = line.label;
+  });
 
   if (!series.length) {
     const text = svgEl("text", {
@@ -140,6 +152,7 @@ function lineChart(container, options) {
     svgEl("path", {
       d, fill: "none", stroke: s.color, "stroke-width": 2,
       "stroke-linejoin": "round", "stroke-linecap": "round", "clip-path": `url(#${clipId})`,
+      ...(s.dash ? { "stroke-dasharray": "5 4" } : {}),
     }, svg);
   }
 

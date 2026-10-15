@@ -245,6 +245,24 @@ tbody th { font-weight: 500; }
 .arrow { color: var(--text-muted); padding: 7px 8px; }
 .suggested { font-weight: 600; }
 .reason { color: var(--text-secondary); min-width: 24ch; }
+.figure-link { white-space: nowrap; color: var(--accent); }
+
+/* Evidence figures under each group of changes */
+.evidence {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+.evidence-figure { margin: 0; scroll-margin-top: 16px; }
+.evidence-figure h4 { margin: 0; font-size: 14px; font-weight: 600; }
+.evidence-figure:target { border-color: var(--accent); }
+.justifies { margin: 0 0 8px; font-size: 12px; color: var(--text-muted); }
+.justifies code { font-size: 12px; color: var(--text-secondary); }
+.legend-item .key.dash {
+  background: repeating-linear-gradient(90deg, currentColor 0 4px, transparent 4px 7px) !important;
+  color: var(--text-secondary);
+}
 .muted { color: var(--text-muted); }
 .nothing { margin: 8px 0 0; color: var(--text-secondary); }
 
