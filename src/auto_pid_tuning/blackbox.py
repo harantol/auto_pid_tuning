@@ -129,6 +129,10 @@ def load_log(path: str | Path, log_index: int = 1) -> FlightLog:
         os.unlink(single)
 
     names = parser.field_names
+    if not names:  # a header cut short parses on some platforms, without any field
+        raise LogError(
+            f"Flight {log_index} of {path.name} cannot be read, its header is truncated."
+        )
     index = {name: i for i, name in enumerate(names)}
 
     def columns(prefix: str, count: int) -> list[int | None]:
