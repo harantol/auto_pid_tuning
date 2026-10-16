@@ -1,7 +1,9 @@
 """Point the Hugging Face Space at one image version.
 
 The Space only holds a Dockerfile that starts from the image CI pushed to GHCR, so the
-online app runs exactly what S13 runs. Needs HF_TOKEN (write) in the environment.
+online app runs exactly what S13 runs. Anything else in the Space (such as the template
+files Hugging Face adds on creation) is removed in the same commit. Needs HF_TOKEN (write)
+in the environment.
 
     uv run --no-project --with huggingface_hub python deploy/hf_space.py <space> <image>
 """
@@ -9,10 +11,8 @@ online app runs exactly what S13 runs. Needs HF_TOKEN (write) in the environment
 from __future__ import annotations
 
 import sys
-import tempfile
-from pathlib import Path
 
-from huggingface_hub import HfApi
+from huggingface_hub import CommitOperationAdd, CommitOperationDelete, HfApi
 
 README = """---
 title: Betaflight auto-tune
@@ -28,16 +28,26 @@ Betaflight PID, filter and rate tuning from a blackbox log.
 Source: https://github.com/harantol/auto_pid_tuning
 """
 
+KEEP = {".gitattributes"}  # git settings of the Space repository, not content
+
 
 def main(space: str, image: str) -> None:
     api = HfApi()
     api.create_repo(space, repo_type="space", space_sdk="docker", exist_ok=True)
-    with tempfile.TemporaryDirectory() as folder:
-        Path(folder, "README.md").write_text(README, encoding="utf-8")
-        Path(folder, "Dockerfile").write_text(f"FROM {image}\n", encoding="utf-8")
-        api.upload_folder(
-            repo_id=space, repo_type="space", folder_path=folder, commit_message=f"Deploy {image}"
-        )
+    files = {"README.md": README, "Dockerfile": f"FROM {image}\n"}
+    stale = set(api.list_repo_files(space, repo_type="space")) - set(files) - KEEP
+    api.create_commit(
+        repo_id=space,
+        repo_type="space",
+        operations=[
+            *(
+                CommitOperationAdd(path_in_repo=path, path_or_fileobj=text.encode())
+                for path, text in files.items()
+            ),
+            *(CommitOperationDelete(path_in_repo=path) for path in sorted(stale)),
+        ],
+        commit_message=f"Deploy {image}",
+    )
 
 
 if __name__ == "__main__":
