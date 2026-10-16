@@ -51,6 +51,7 @@ main {
 }
 
 h1 { margin: 0; font-size: 26px; font-weight: 650; letter-spacing: -0.01em; }
+h1 .logo { width: 32px; height: 32px; margin-right: 10px; vertical-align: -6px; }
 h2 { margin: 0; font-size: 16px; font-weight: 600; }
 h3 { margin: 20px 0 6px; font-size: 13px; font-weight: 600; color: var(--text-secondary); }
 h3:first-child { margin-top: 4px; }
