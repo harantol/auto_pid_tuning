@@ -135,6 +135,7 @@ function render() {
   $("style-note").textContent = `${styleLabel(tune.style)}: ${tune.description}`;
 
   renderFlightPicker(data);
+  renderExplorer(data);
   renderTiles(data, tune);
   renderCharts(data, tune);
   renderMeasured(data);
@@ -156,6 +157,19 @@ function renderFlightPicker(data) {
     option.selected = i === data.log_index;
     select.appendChild(option);
   }
+}
+
+// Blackbox Explorer cannot be handed a file from another site: the link opens it, and the
+// text names the log (and flight) to open there again.
+function renderExplorer(data) {
+  const link = el("a", "", "Blackbox Explorer");
+  link.href = "https://blackbox.betaflight.com/";
+  link.target = "_blank";
+  link.rel = "noopener";
+  const flight = data.log_count > 1 ? `, flight ${data.log_index}` : "";
+  $("explorer").replaceChildren(
+    "To see the raw traces, open ", link, ` and choose ${state.file.name}${flight} there.`,
+  );
 }
 
 function tile(label, value, note, small) {
