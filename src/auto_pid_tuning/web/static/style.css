@@ -151,6 +151,8 @@ select {
 
 #results.stale { opacity: 0.45; pointer-events: none; }
 .style-note { margin: 24px 0 0; color: var(--text-secondary); }
+.explorer { margin: 4px 0 0; font-size: 14px; color: var(--text-muted); }
+.explorer a { color: var(--accent); }
 
 /* Summary tiles */
 .tiles {
