@@ -1,4 +1,4 @@
-# Every merge to master: test, version it, publish the image, update the online Space.
+# Every merge to master: test, version it, publish the image.
 # S13 picks the new image up by itself (Watchtower, see deploy/s13/compose.yaml).
 name: Release
 
@@ -56,12 +56,3 @@ jobs:
           git ls-remote --exit-code --tags origin "$TAG" || {
             git tag "$TAG" && git push origin "$TAG"
           }
-
-      - uses: astral-sh/setup-uv@v6
-      - name: Deploy to Hugging Face
-        if: vars.HF_SPACE != ''
-        env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: >-
-          uv run --no-project --with huggingface_hub python deploy/hf_space.py
-          "${{ vars.HF_SPACE }}" "${{ env.IMAGE }}:${{ steps.version.outputs.version }}"
