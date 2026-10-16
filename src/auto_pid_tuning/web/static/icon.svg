@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" stroke="#2a78d6" stroke-width="3" stroke-linecap="round">
+  <!-- FPV quad seen from above: X frame, four props, body with the camera at the front -->
+  <path d="M15 15 49 49M49 15 15 49"/>
+  <circle cx="15" cy="15" r="11" stroke-width="2.5" stroke-dasharray="5 3"/>
+  <circle cx="49" cy="15" r="11" stroke-width="2.5" stroke-dasharray="5 3"/>
+  <circle cx="15" cy="49" r="11" stroke-width="2.5" stroke-dasharray="5 3"/>
+  <circle cx="49" cy="49" r="11" stroke-width="2.5" stroke-dasharray="5 3"/>
+  <g fill="#2a78d6" stroke="none">
+    <circle cx="15" cy="15" r="4"/>
+    <circle cx="49" cy="15" r="4"/>
+    <circle cx="15" cy="49" r="4"/>
+    <circle cx="49" cy="49" r="4"/>
+    <rect x="25" y="22" width="14" height="22" rx="4"/>
+  </g>
+  <rect x="28" y="16" width="8" height="6" rx="2" fill="#2a78d6" stroke="none"/>
+</svg>
