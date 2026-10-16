@@ -1,4 +1,4 @@
-# The web app, as served on S13 and on the Hugging Face Space.
+# The web app, as served on S13.
 FROM python:3.12-slim
 
 COPY --from=ghcr.io/astral-sh/uv:0.12.23 /uv /usr/local/bin/uv
@@ -15,7 +15,7 @@ RUN uv sync --frozen --no-dev --no-editable
 ARG APP_VERSION=dev
 ENV AUTO_PID_TUNING_VERSION=$APP_VERSION PATH="/app/.venv/bin:$PATH"
 
-# Hugging Face Spaces run the image as uid 1000.
+# Run as an unprivileged user.
 USER 1000
 EXPOSE 7860
 CMD ["auto-pid-tuning-web", "--host", "0.0.0.0", "--port", "7860", "--no-browser"]
