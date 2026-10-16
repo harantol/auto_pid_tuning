@@ -9,5 +9,5 @@ Given a black box of a flight and a user-defined style of this flight (freestyle
 - The core is UI-independent. The web app (`web/app.py`, FastAPI) only calls `load_log` / `analyze` / `tune` and returns `report.flight_to_dict` + `tuning_to_dict`; the page is plain JS/SVG in `web/static`, no Node build.
 - Real logs live in `samples/` (git-ignored); tests needing them are skipped when absent.
 - Version `MAJOR.MINOR`: major in `VERSION`, minor = merges into master since it changed (`version.py`).
-- GitHub (`harantol/auto_pid_tuning`) with PRs into `master`. A merge publishes the Docker image to GHCR (S13 = Debian server 192.168.1.15, not the Synology `s13.home`, picks it up via Watchtower, `deploy/s13`).
+- GitHub (`harantol/auto_pid_tuning`) with PRs into `master`. A merge publishes the Docker image to GHCR (S13 = Debian server 192.168.1.15, not the Synology `s13.home`, picks it up via Watchtower, `deploy/s13`) and attaches the Android app (`android/`, a WebView on S13) to a GitHub release, which the home F-Droid store on S13 (repo `magasin-fdroid` in Forgejo) picks up.
 - `orangebox` comes from `vendor/` (PyPI wheel with broken entry points removed, see `vendor/README.md`).

@@ -15,3 +15,15 @@ jobs:
       - run: uv sync --frozen
       - run: uv run ruff check
       - run: uv run pytest
+
+  apk:
+    runs-on: ubuntu-latest  # has an Android SDK in $ANDROID_HOME
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: sh android/build.sh  # throwaway key: only checks that the app builds
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apk
+          path: android/build/*.apk

@@ -101,12 +101,22 @@ function setupControls() {
   window.addEventListener("drop", (event) => event.preventDefault());
 
   $("flight").addEventListener("change", (event) => analyse(event.target.value));
+  // In the Android app (android/), the page is plain HTTP in a WebView: no clipboard API and no
+  // downloads there, so the app does both.
+  const android = window.AutoPidAndroid;
   $("copy").addEventListener("click", async () => {
-    await navigator.clipboard.writeText($("cli").textContent);
+    if (android) android.copy($("cli").textContent);
+    else await navigator.clipboard.writeText($("cli").textContent);
     $("copy").textContent = "Copied";
     setTimeout(() => { $("copy").textContent = "Copy"; }, 1500);
   });
   $("download").addEventListener("click", () => {
+    if (android) {
+      const saved = android.save(`tune-${state.style}.txt`, $("cli").textContent + "\n");
+      $("download").textContent = saved ? "Saved in Downloads" : "Not saved";
+      setTimeout(() => { $("download").textContent = "Download"; }, 2000);
+      return;
+    }
     const blob = new Blob([$("cli").textContent + "\n"], { type: "text/plain" });
     const link = el("a");
     link.href = URL.createObjectURL(blob);
