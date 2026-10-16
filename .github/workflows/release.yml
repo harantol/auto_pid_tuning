@@ -1,4 +1,4 @@
-# Every merge to master: test, version it, publish the image, update the online Space.
+# Every merge to master: test, version it, publish the image.
 # S13 picks the new image up by itself (Watchtower, see deploy/s13/compose.yaml).
 name: Release
 
