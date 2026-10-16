@@ -5,7 +5,8 @@ want it to fly (`freestyle`, `racing`, `cinematic`, `long_range`). The result is
 commands to paste in the Betaflight CLI.
 
 It comes as a web app (drop a log, read the result) and as a command-line tool. The web app
-runs on the local network at http://192.168.1.15:8787 (S13).
+runs on the local network at http://192.168.1.15:8787 (S13), and as an Android app from the
+home F-Droid store (see [android/README.md](android/README.md)).
 
 ## Install
 
@@ -173,7 +174,9 @@ Each merge into `master` (`.github/workflows/release.yml`) then:
 
 1. runs the tests again and computes the version;
 2. builds the Docker image and pushes it to `ghcr.io/harantol/auto_pid_tuning` as `:X.Y` and
-   `:latest`, and tags the commit `vX.Y`.
+   `:latest`, and tags the commit `vX.Y`;
+3. builds the Android app and attaches it to the GitHub release `vX.Y`, where the home F-Droid
+   store picks it up.
 
 S13 (the Debian server at 192.168.1.15) runs `deploy/s13/compose.yaml`: the app on port 8787 plus Watchtower, which picks up a new
 `:latest` image within 5 minutes.

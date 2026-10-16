@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The quad of web/static/icon.svg in white, scaled into the safe zone of an adaptive icon.
+     Vector drawables have no dashes, so the props are plain rings. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="64"
+    android:viewportHeight="64">
+    <group
+        android:pivotX="32"
+        android:pivotY="32"
+        android:scaleX="0.6"
+        android:scaleY="0.6">
+        <path android:pathData="M15,15L49,49M49,15L15,49" android:strokeColor="#ffffff" android:strokeWidth="3" android:strokeLineCap="round" />
+        <path android:pathData="M4,15a11,11 0 1,0 22,0a11,11 0 1,0 -22,0M38,15a11,11 0 1,0 22,0a11,11 0 1,0 -22,0M4,49a11,11 0 1,0 22,0a11,11 0 1,0 -22,0M38,49a11,11 0 1,0 22,0a11,11 0 1,0 -22,0" android:strokeColor="#ffffff" android:strokeWidth="2" android:strokeAlpha="0.7" />
+        <path android:pathData="M11,15a4,4 0 1,0 8,0a4,4 0 1,0 -8,0M45,15a4,4 0 1,0 8,0a4,4 0 1,0 -8,0M11,49a4,4 0 1,0 8,0a4,4 0 1,0 -8,0M45,49a4,4 0 1,0 8,0a4,4 0 1,0 -8,0" android:fillColor="#ffffff" />
+        <path android:pathData="M29,22h6a4,4 0 0,1 4,4v14a4,4 0 0,1 -4,4h-6a4,4 0 0,1 -4,-4v-14a4,4 0 0,1 4,-4zM30,16h4a2,2 0 0,1 2,2v4h-8v-4a2,2 0 0,1 2,-2z" android:fillColor="#ffffff" />
+    </group>
+</vector>

@@ -1,0 +1,3 @@
+Choisissez une blackbox (.bbl / .bfl) et le style de vol voulu (freestyle, racing, cinematic, long range) : l'application propose les changements de PID, de filtres et de rates, chacun justifié par un graphe tiré du log, et les commandes à coller dans le CLI Betaflight.
+
+L'analyse est faite par le serveur de la maison (S13) : l'application ne fonctionne que sur le WiFi de la maison.
