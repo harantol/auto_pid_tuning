@@ -10,40 +10,40 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
 import android.provider.MediaStore;
-import android.text.Html;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
-import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 
 /**
- * Betaflight auto-tune: the web app served by S13, shown in a WebView.
+ * Betaflight auto-tune: the web app (app/ in the repository), shown in a WebView.
  *
- * The analysis runs on S13, so the app only works where S13 is reachable (the home WiFi).
- * When it is not, a short page says so and offers to retry. The page asks the phone for the
- * two things a plain HTTP page cannot do in a WebView: copy to the clipboard and save a file.
+ * The page and its analysis code ship inside the app, as assets under app/, and the analysis
+ * runs on the phone: no server and no network are needed. The assets are served on a
+ * reserved https host, so the page gets a real origin (JavaScript modules and workers refuse
+ * file:// pages). The page asks the phone for what it cannot do in a WebView: copy to the
+ * clipboard and save a file.
  */
 public class MainActivity extends Activity {
     private static final int PICK_FILE = 1;
+    // Reserved for apps serving their own content (as AndroidX WebViewAssetLoader does).
+    private static final String HOST = "appassets.androidplatform.net";
+    private static final String HOME = "https://" + HOST + "/index.html";
 
     private WebView web;
-    private String server;
     private ValueCallback<Uri[]> fileCallback;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        server = readAsset("server.txt").trim();
 
         web = new WebView(this);
         setContentView(web);
@@ -55,20 +55,22 @@ public class MainActivity extends Activity {
         web.addJavascriptInterface(new Bridge(), "AutoPidAndroid");
         web.setWebViewClient(new WebViewClient() {
             @Override
+            public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                Uri url = request.getUrl();
+                if (!HOST.equals(url.getHost())) return null;
+                return asset(url.getPath());
+            }
+
+            @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 Uri url = request.getUrl();
-                if (url.getHost() != null && url.getHost().equals(Uri.parse(server).getHost())) return false;
+                if (HOST.equals(url.getHost())) return false;
                 try {
                     startActivity(new Intent(Intent.ACTION_VIEW, url)); // other sites: in the browser
                 } catch (ActivityNotFoundException e) {
                     // no browser: ignore the link
                 }
                 return true;
-            }
-
-            @Override
-            public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
-                if (request.isForMainFrame()) showUnreachable(String.valueOf(error.getDescription()));
             }
         });
         web.setWebChromeClient(new WebChromeClient() {
@@ -78,31 +80,34 @@ public class MainActivity extends Activity {
             }
         });
 
-        if (savedInstanceState == null || web.restoreState(savedInstanceState) == null) web.loadUrl(server);
+        if (savedInstanceState == null || web.restoreState(savedInstanceState) == null) web.loadUrl(HOME);
     }
 
-    /** S13 did not answer: say why it matters and offer to retry. */
-    private void showUnreachable(String reason) {
-        String page = "<!doctype html><meta name=viewport content='width=device-width,initial-scale=1'>"
-                + "<style>body{font:16px/1.5 system-ui,sans-serif;margin:0;padding:32px 20px;color:#0b0b0b;background:#fafaf7}"
-                + "button{font:inherit;padding:10px 18px;border:0;border-radius:8px;background:#2a78d6;color:#fff}"
-                + "small{color:#898781}@media (prefers-color-scheme:dark){body{background:#111;color:#fff}}</style>"
-                + "<h2>S13 is out of reach</h2>"
-                + "<p>The analysis runs on the home server. Connect to the home WiFi, then retry.</p>"
-                + "<p><button onclick=\"location.replace('" + Html.escapeHtml(server) + "')\">Retry</button></p>"
-                + "<p><small>" + Html.escapeHtml(server) + " · " + Html.escapeHtml(reason) + "</small></p>";
-        web.loadDataWithBaseURL(server, page, "text/html", "utf-8", server);
-    }
-
-    private String readAsset(String name) {
-        try (InputStream in = getAssets().open(name)) {
-            ByteArrayOutputStream out = new ByteArrayOutputStream();
-            byte[] buffer = new byte[256];
-            for (int n; (n = in.read(buffer)) > 0; ) out.write(buffer, 0, n);
-            return out.toString("UTF-8");
+    /** A file of the page, from the assets; 404 when there is none. */
+    private WebResourceResponse asset(String path) {
+        if (path == null || path.equals("/")) path = "/index.html";
+        if (path.contains("..")) return notFound();
+        try {
+            return new WebResourceResponse(mimeType(path), "utf-8", getAssets().open("app" + path));
         } catch (IOException e) {
-            return "";
+            return notFound();
         }
+    }
+
+    private static WebResourceResponse notFound() {
+        WebResourceResponse response = new WebResourceResponse("text/plain", "utf-8", null);
+        response.setStatusCodeAndReasonPhrase(404, "Not Found");
+        return response;
+    }
+
+    /** JavaScript modules are only run when served with a JavaScript type. */
+    private static String mimeType(String path) {
+        if (path.endsWith(".html")) return "text/html";
+        if (path.endsWith(".js")) return "text/javascript";
+        if (path.endsWith(".css")) return "text/css";
+        if (path.endsWith(".svg")) return "image/svg+xml";
+        if (path.endsWith(".json")) return "application/json";
+        return "application/octet-stream";
     }
 
     /** A blackbox log has no MIME type Android knows: offer every file. */

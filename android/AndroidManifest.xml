@@ -1,16 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Betaflight auto-tune for Android: the web app served by S13, in a WebView (see README.md). -->
+<!-- Betaflight auto-tune for Android: the web app, shipped inside and run in a WebView (see README.md). -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="home.autopidtuning">
 
+    <!-- The page and the analysis are local; INTERNET lets the WebView load its own served assets. -->
     <uses-permission android:name="android.permission.INTERNET" />
 
-    <!-- usesCleartextTraffic: S13 answers in plain HTTP on the home network. -->
     <application
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
-        android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
-        android:usesCleartextTraffic="true">
+        android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
         <activity
             android:name=".MainActivity"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|keyboard|uiMode|density"

@@ -1,0 +1,16 @@
+{
+  "name": "auto-pid-tuning",
+  "private": true,
+  "description": "Betaflight auto-tuning of PIDs, filters and rates from a blackbox log and a flight style",
+  "type": "module",
+  "bin": {
+    "auto-pid-tuning": "bin/auto-pid-tuning.js"
+  },
+  "scripts": {
+    "test": "node --test \"tests/js/*.test.js\"",
+    "start": "node bin/serve.js"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

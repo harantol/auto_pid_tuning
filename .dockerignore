@@ -1,12 +1,4 @@
-.git
-.venv
-.idea
-.claude
-samples
-tests
-deploy
-**/__pycache__
-*.bbl
-*.bfl
-*.BBL
-*.BFL
+# The image only needs app/ and deploy/nginx.conf.
+*
+!app
+!deploy/nginx.conf

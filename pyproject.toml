@@ -1,25 +1,20 @@
 [project]
 name = "auto-pid-tuning"
 version = "0.1.0"
-description = "Betaflight auto-tuning of PIDs, filters and rates from a blackbox log and a flight style"
+description = "Reference Python version of the Betaflight auto-tuning (the app runs the JavaScript version in app/)"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "numpy>=2.0",
     "scipy>=1.11",
     "orangebox>=0.5.0",
-    "fastapi>=0.142.2",
-    "uvicorn>=0.54.0",
-    "python-multipart>=0.0.32",
 ]
 
 [project.scripts]
 auto-pid-tuning = "auto_pid_tuning.cli:main"
-auto-pid-tuning-web = "auto_pid_tuning.web.app:main"
 
 [dependency-groups]
 dev = [
-    "httpx>=0.28.1",
     "pytest>=8",
     "ruff>=0.6",
 ]

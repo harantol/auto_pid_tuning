@@ -1,4 +1,6 @@
-"use strict";
+// The page: pick a log, run the analysis in the browser, render the result.
+
+import { STYLES } from "./core/styles.js";
 
 const AXES = ["roll", "pitch", "yaw"];
 const COLORS = { roll: "var(--series-1)", pitch: "var(--series-2)", yaw: "var(--series-3)" };
@@ -21,10 +23,9 @@ function styleLabel(name) {
 
 // ---- Controls -------------------------------------------------------------------------
 
-async function loadStyles() {
-  const styles = await (await fetch("/api/styles")).json();
+function loadStyles() {
   const group = $("styles");
-  for (const style of styles) {
+  for (const style of Object.values(STYLES)) {
     const label = el("label");
     label.title = style.description;
     const input = el("input");
@@ -48,23 +49,53 @@ function setStatus(text, kind) {
   status.className = `status ${kind || ""}`;
 }
 
+// Everything runs on the phone or computer: the log never leaves it. The analysis runs in a
+// worker so the page stays responsive; where a module worker cannot start, it runs here.
+async function analyseHere(bytes, name, logIndex) {
+  const { analyseFile, errorMessage } = await import("./core/index.js");
+  try {
+    return analyseFile(bytes, name, logIndex);
+  } catch (error) {
+    throw new Error(errorMessage(error));
+  }
+}
+
+function runAnalysis(bytes, name, logIndex) {
+  let worker;
+  try {
+    worker = new Worker(new URL("./worker.js", import.meta.url), { type: "module" });
+  } catch {
+    return analyseHere(bytes, name, logIndex);
+  }
+  return new Promise((resolve, reject) => {
+    worker.onmessage = ({ data }) => {
+      worker.terminate();
+      if (data.error) reject(new Error(data.error));
+      else resolve(data.result);
+    };
+    worker.onerror = (event) => {
+      event.preventDefault();
+      worker.terminate();
+      analyseHere(bytes, name, logIndex).then(resolve, reject);
+    };
+    worker.postMessage({ bytes, name, logIndex });
+  });
+}
+
 async function analyse(logIndex) {
   if (!state.file) return;
-  const megabytes = state.file.size / 1e6;
-  setStatus(`Decoding ${state.file.name} (${megabytes.toFixed(1)} MB), this can take a few seconds per MB…`, "busy");
+  const file = state.file;
+  setStatus(`Decoding ${file.name} (${(file.size / 1e6).toFixed(1)} MB)…`, "busy");
   $("results").classList.add("stale");  // keep the previous render in place while loading
-
-  const body = new FormData();
-  body.append("file", state.file);
-  if (logIndex) body.append("log_index", logIndex);
   try {
-    const response = await fetch("/api/analyze", { method: "POST", body });
-    const payload = await response.json();
-    if (!response.ok) throw new Error(payload.detail || `Server error ${response.status}`);
-    state.data = payload;
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const result = await runAnalysis(bytes, file.name, logIndex ? Number(logIndex) : null);
+    if (file !== state.file) return;  // another log was picked meanwhile
+    state.data = result;
     setStatus("");
     render();
   } catch (error) {
+    if (file !== state.file) return;
     setStatus(error.message, "error");
     if (!state.data) $("results").hidden = true;
   } finally {
@@ -101,8 +132,8 @@ function setupControls() {
   window.addEventListener("drop", (event) => event.preventDefault());
 
   $("flight").addEventListener("change", (event) => analyse(event.target.value));
-  // In the Android app (android/), the page is plain HTTP in a WebView: no clipboard API and no
-  // downloads there, so the app does both.
+  // In the Android app (android/), the page is in a WebView: no clipboard API and no downloads
+  // there, so the app does both.
   const android = window.AutoPidAndroid;
   $("copy").addEventListener("click", async () => {
     if (android) android.copy($("cli").textContent);
@@ -556,11 +587,16 @@ window.addEventListener("resize", () => {
   }, 150);
 });
 
-setupControls();
+// version.json is written when the app is built (Docker image, Android app).
 async function loadVersion() {
-  const { version } = await (await fetch("/api/version")).json();
-  $("version").textContent = `v${version}`;
+  try {
+    const { version } = await (await fetch("version.json")).json();
+    $("version").textContent = `v${version}`;
+  } catch {
+    $("version").textContent = "dev";
+  }
 }
 
+setupControls();
 loadStyles();
 loadVersion();
