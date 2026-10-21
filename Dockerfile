@@ -1,21 +1,14 @@
-# The web app, as served on S13.
-FROM python:3.12-slim
+# The web app as served on S13: static files, the analysis runs in the browser.
+FROM nginxinc/nginx-unprivileged:1.27-alpine
 
-COPY --from=ghcr.io/astral-sh/uv:0.12.23 /uv /usr/local/bin/uv
-
-WORKDIR /app
-ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never
-COPY pyproject.toml uv.lock README.md ./
-COPY vendor ./vendor
-RUN uv sync --frozen --no-dev --no-install-project
-COPY src ./src
-RUN uv sync --frozen --no-dev --no-editable
+COPY deploy/nginx.conf /etc/nginx/conf.d/default.conf
+COPY app /usr/share/nginx/html
 
 # Set by CI from version.py: the image has no git history to count merges from.
 ARG APP_VERSION=dev
-ENV AUTO_PID_TUNING_VERSION=$APP_VERSION PATH="/app/.venv/bin:$PATH"
+USER root
+RUN printf '{"version": "%s"}\n' "$APP_VERSION" > /usr/share/nginx/html/version.json
+USER 101
 
-# Run as an unprivileged user.
-USER 1000
+# The port S13's compose.yaml maps to 8787.
 EXPOSE 7860
-CMD ["auto-pid-tuning-web", "--host", "0.0.0.0", "--port", "7860", "--no-browser"]

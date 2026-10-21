@@ -4,29 +4,29 @@ Suggests PIDs, filters and rates for a Betaflight quad from a blackbox log and t
 want it to fly (`freestyle`, `racing`, `cinematic`, `long_range`). The result is a list of
 commands to paste in the Betaflight CLI.
 
-It comes as a web app (drop a log, read the result) and as a command-line tool. The web app
-runs on the local network at http://192.168.1.15:8787 (S13), and as an Android app from the
-home F-Droid store (see [android/README.md](android/README.md)).
+It comes as a web app (drop a log, read the result) and as a command-line tool. The analysis
+runs in the browser, so the log never leaves the phone or computer:
+
+- the **Android app**, from the home F-Droid store (see [android/README.md](android/README.md)),
+  carries the whole app and works anywhere, without network;
+- the page is also served on the local network at http://192.168.1.15:8787 (S13);
+- or run it on your own computer, see below.
 
 ## Install
 
-The project is managed with [uv](https://docs.astral.sh/uv/). If you do not have it yet, on
-Windows:
+The app is plain JavaScript and only needs [Node.js](https://nodejs.org/) 22 or newer, with
+nothing else to install. On Windows:
 
 ```
-powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+winget install OpenJS.NodeJS.LTS
 ```
 
-Then get the code and install it:
+Then get the code:
 
 ```
 git clone https://github.com/harantol/auto_pid_tuning.git
 cd auto_pid_tuning
-uv sync
 ```
-
-This creates `.venv` and installs everything. It only needs to be run again after pulling
-changes.
 
 ## Tutorial
 
@@ -47,23 +47,25 @@ picked automatically.
 
 ### 2. Launch the web app
 
+Open the Android app, or http://192.168.1.15:8787 at home, or on your computer:
+
 ```
-uv run auto-pid-tuning-web
+npm start
 ```
 
 A browser tab opens on http://127.0.0.1:8000. Leave the terminal open while you use the app,
-and stop it with `Ctrl+C`.
+and stop it with `Ctrl+C`. Options go after `--`, for example `npm start -- --port 8010`:
 
 | Option | Effect |
 |---|---|
 | `--port 8010` | use another port, when 8000 is already taken |
-| `--host 0.0.0.0` | accept connections from other machines (there is no login: local network only) |
+| `--host 0.0.0.0` | accept connections from other machines on the local network |
 | `--no-browser` | do not open a browser tab |
 
 ### 3. Analyse the log
 
-1. Drop the log on the page, or click the box to choose it. Decoding takes a few seconds per
-   megabyte.
+1. Drop the log on the page, or click the box to choose it. Decoding takes about a second
+   for a few minutes of flight.
 2. Pick a **flight style**. Switching is instant, the log is not decoded again.
 
    | Style | Aims for |
@@ -108,7 +110,7 @@ change. To undo, paste your `diff all` backup.
 The same analysis without a browser:
 
 ```
-uv run auto-pid-tuning path/to/log.bbl --style cinematic
+node bin/auto-pid-tuning.js path/to/log.bbl --style cinematic
 ```
 
 | Option | Effect |
@@ -120,10 +122,10 @@ uv run auto-pid-tuning path/to/log.bbl --style cinematic
 
 ## Troubleshooting
 
-- **The page shows another site, or the app exits with "error while attempting to bind"**:
-  port 8000 is used by another program. Start with `--port 8010` and open that address.
-- **"uv" is not recognised**: open a new terminal after installing uv, so that it is on the
-  `PATH`.
+- **The page shows another site, or "Port 8000 is already used"**: port 8000 is used by
+  another program. Start with `npm start -- --port 8010` and open that address.
+- **"node" or "npm" is not recognised**: open a new terminal after installing Node.js, so that
+  it is on the `PATH`.
 - **An axis is "not measurable"**: its stick moves were too gentle. Add sharp snaps on that
   axis in the next flight.
 - **"holds too few frames to analyse"**: the selected flight is an arming test or a truncated
@@ -133,17 +135,34 @@ uv run auto-pid-tuning path/to/log.bbl --style cinematic
 
 ## How it works
 
-1. `blackbox.py` decodes the log (via `orangebox`) into numpy arrays.
-2. `analysis.py` measures the flight:
+Everything is in `app/`, a static page with no build step: plain JavaScript modules and SVG.
+The analysis is `app/core/`, independent of the page:
+
+1. `decoder.js` decodes the blackbox format. It follows the parser of Betaflight's
+   [Blackbox Explorer](https://github.com/betaflight/blackbox-log-viewer) (same encodings,
+   predictors and recovery from corrupt frames).
+2. `blackbox.js` splits a file into flights and turns one into arrays.
+3. `analysis.js` measures the flight (`numeric.js` holds the FFT and filters it needs):
    - closed-loop **step response** of each axis from the setpoint-to-gyro cross-spectrum,
      limited to the band where the sticks actually excited the quad (overshoot, rise time,
      steady state);
    - **noise** above 100 Hz on the filtered gyro and on the D-term, and any standing peak;
    - **motor saturation** and **stick usage**.
-3. `styles.py` defines the targets of each flight style.
-4. `tuner.py` compares the measurements to the targets and emits setting changes.
-5. `report.py` / `cli.py` render the result; `web/` serves it as a page (FastAPI, plain
-   JavaScript and SVG, no build step).
+4. `styles.js` defines the targets of each flight style.
+5. `tuner.js` compares the measurements to the targets and emits setting changes.
+6. `report.js` renders the result as JSON (for the page) and text (command line).
+
+The page (`app.js`) runs the analysis in a worker (`worker.js`) so it stays responsive while
+a log decodes. `bin/` holds the command line and the local server.
+
+### The Python version
+
+`src/auto_pid_tuning/` is the first version of the same analysis, in Python. It stays for now
+as a reference: `tests/test_js_parity.py` runs both on simulated flights and checks that they
+give the same measurements and the same changes. On real logs the JavaScript version reads the
+first frames correctly where the Python decoder (`orangebox`) gets them wrong, so both differ
+slightly there. The Python version will be removed once the JavaScript one has proven itself
+on real flights.
 
 ## Limits
 
@@ -155,15 +174,19 @@ uv run auto-pid-tuning path/to/log.bbl --style cinematic
 ## Development
 
 ```
-uv run pytest
+npm test                 # the app's tests (tests/js/)
+uv run pytest            # the Python reference, and the comparison of both versions
 uv run ruff check
 ```
 
-Sample logs go in `samples/` (git-ignored); tests that need them are skipped when absent.
+The Python side is managed with [uv](https://docs.astral.sh/uv/) (`uv sync` once). Sample logs
+go in `samples/` (git-ignored); tests that need them are skipped when absent. The JavaScript
+tests write their own logs (`tests/js/writer.js`), from simulated flights.
 
 ## Versions and deployment
 
-The version is `MAJOR.MINOR`, shown at the bottom of the web page and served at `/api/version`.
+The version is `MAJOR.MINOR`, shown at the bottom of the web page (from `version.json`, written
+when the image or the Android app is built).
 
 - `MAJOR` is the number in the `VERSION` file. Edit it in a PR to start a new major version.
 - `MINOR` counts the merges into `master` since `VERSION` last changed, so each merged PR adds
@@ -173,8 +196,8 @@ Changes go through pull requests on GitHub. Each PR runs the tests (`.github/wor
 Each merge into `master` (`.github/workflows/release.yml`) then:
 
 1. runs the tests again and computes the version;
-2. builds the Docker image and pushes it to `ghcr.io/harantol/auto_pid_tuning` as `:X.Y` and
-   `:latest`, and tags the commit `vX.Y`;
+2. builds the Docker image (nginx serving `app/`) and pushes it to
+   `ghcr.io/harantol/auto_pid_tuning` as `:X.Y` and `:latest`, and tags the commit `vX.Y`;
 3. builds the Android app and attaches it to the GitHub release `vX.Y`, where the home F-Droid
    store picks it up.
 
@@ -190,4 +213,4 @@ S13 (the Debian server at 192.168.1.15) runs `deploy/s13/compose.yaml`: the app 
   it once there with `docker compose up -d`.
 
 To build and run the image locally: `docker build -t auto-pid-tuning .` then
-`docker run -p 7860:7860 auto-pid-tuning`.
+`docker run -p 7860:7860 auto-pid-tuning`. Each PR also builds it in CI (`image` job).

@@ -1,12 +1,12 @@
 #!/bin/sh
 # Builds the Android APK without Gradle: aapt2 (resources), javac + d8 (code), zipalign and
-# apksigner, from an installed Android SDK (GitHub runners have one in $ANDROID_HOME).
+# apksigner, from an installed Android SDK (GitHub runners have one in $ANDROID_HOME). The web
+# app (app/) goes in the APK as assets: the analysis runs on the phone.
 #
 #   sh android/build.sh               # -> android/build/auto-pid-tuning-<version>.apk
 #
 # Variables:
 #   APP_VERSION        version name, MAJOR.MINOR (default: src/auto_pid_tuning/version.py)
-#   APP_SERVER         address the app opens (default: S13, http://192.168.1.15:8787)
 #   ANDROID_KEYSTORE   signing key; every release must use the same one, or Android refuses
 #   ANDROID_KEYSTORE_PASSWORD   the update. Without a key, a throwaway one is made (CI checks).
 set -eu
@@ -23,7 +23,8 @@ APK=$OUT/auto-pid-tuning-$VERSION.apk
 
 rm -rf "$OUT"
 mkdir -p "$OUT/assets" "$OUT/classes" "$OUT/dex"
-printf '%s\n' "${APP_SERVER:-http://192.168.1.15:8787}" > "$OUT/assets/server.txt"
+cp -R "$ROOT/app" "$OUT/assets/app"
+printf '{"version": "%s"}\n' "$VERSION" > "$OUT/assets/app/version.json"
 
 "$BT/aapt2" compile --dir "$HERE/res" -o "$OUT/res.zip"
 "$BT/aapt2" link -o "$OUT/unsigned.apk" -I "$PLATFORM" --manifest "$HERE/AndroidManifest.xml" \

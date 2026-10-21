@@ -321,8 +321,10 @@ def typical_dterm(dterm: np.ndarray, flying: np.ndarray, fs: float) -> tuple[int
     candidates = np.nonzero(airborne[: -length + 1] > 0)[0]
     if not len(candidates):
         return None
-    median = np.median(level[candidates])
-    at = int(candidates[np.argmin(np.abs(level[candidates] - median))])
+    distance = np.abs(level[candidates] - np.median(level[candidates]))
+    # With an even count the two middle stretches are equally close to the median, up to
+    # rounding: the earliest of the closest ones is taken.
+    at = int(candidates[np.argmax(distance <= distance.min() * (1 + 1e-9) + 1e-12)])
     return at, at + length
 
 

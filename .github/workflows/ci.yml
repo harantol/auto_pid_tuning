@@ -11,10 +11,30 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # The app: JavaScript, no dependencies to install.
+      - run: npm test
+      # The Python reference, and the comparison of both versions (tests/test_js_parity.py).
       - uses: astral-sh/setup-uv@v6
       - run: uv sync --frozen
       - run: uv run ruff check
       - run: uv run pytest
+
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Only checks that the image builds; release.yml publishes it.
+      - run: docker build -t auto-pid-tuning .
+      - name: The image serves the app
+        run: |
+          docker run -d --name app -p 7860:7860 auto-pid-tuning
+          for i in 1 2 3 4 5; do curl -fsS http://127.0.0.1:7860/ > /dev/null && break; sleep 1; done
+          curl -fsS http://127.0.0.1:7860/ | grep -q "Betaflight auto-tune"
+          curl -fsSI http://127.0.0.1:7860/core/index.js | grep -qi "content-type: .*javascript"
+          curl -fsS http://127.0.0.1:7860/version.json | grep -q version
 
   apk:
     runs-on: ubuntu-latest  # has an Android SDK in $ANDROID_HOME
